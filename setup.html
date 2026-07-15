@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Management Task Pro — First-time Setup</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; background: #f4f5f7; margin: 0; padding: 24px; }
+  .card { max-width: 480px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.sub { color: #666; font-size: 13px; margin: 0 0 20px; }
+  label { display: block; font-size: 12px; font-weight: 600; color: #444; margin: 12px 0 4px; }
+  input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box; }
+  button { margin-top: 16px; width: 100%; padding: 12px; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  .result { margin-top: 14px; padding: 10px 12px; border-radius: 8px; font-size: 13px; white-space: pre-wrap; }
+  .ok { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+  .err { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+</style>
+</head>
+<body>
+
+  <div class="card">
+    <h1>Step 1 — Create your first login</h1>
+    <p class="sub">Isse ek Boss account banega. Sirf ek baar chalega.</p>
+    <label>Bootstrap Secret</label>
+    <input id="secret" placeholder="Jo BOOTSTRAP_SECRET aapne Vercel me daala tha" />
+    <label>Aapka naam</label>
+    <input id="name" placeholder="Vikas Gupta" />
+    <label>Username</label>
+    <input id="username" placeholder="admin" />
+    <label>Password</label>
+    <input id="password" type="password" placeholder="Kam se kam 8 characters" />
+    <button onclick="bootstrap()">Create my Boss login</button>
+    <div id="bootResult"></div>
+  </div>
+
+  <div class="card">
+    <h1>Step 2 — Test login</h1>
+    <p class="sub">Confirm karo ki login kaam kar raha hai.</p>
+    <label>Username</label>
+    <input id="username2" placeholder="admin" />
+    <label>Password</label>
+    <input id="password2" type="password" placeholder="" />
+    <button onclick="testLogin()">Test Login</button>
+    <div id="loginResult"></div>
+  </div>
+
+<script>
+async function bootstrap() {
+  const secret = document.getElementById('secret').value;
+  const name = document.getElementById('name').value;
+  const username = document.getElementById('username').value;
+  const password = document.getElementById('password').value;
+  const out = document.getElementById('bootResult');
+  out.className = 'result';
+  out.textContent = 'Loading...';
+  try {
+    const res = await fetch('/api/auth/bootstrap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, name, secret }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      out.className = 'result ok';
+      out.textContent = '✅ Success! Login ban gaya: ' + JSON.stringify(data, null, 2);
+    } else {
+      out.className = 'result err';
+      out.textContent = '❌ ' + (data.message || 'Something went wrong');
+    }
+  } catch (e) {
+    out.className = 'result err';
+    out.textContent = '❌ Error: ' + e.message;
+  }
+}
+
+async function testLogin() {
+  const username = document.getElementById('username2').value;
+  const password = document.getElementById('password2').value;
+  const out = document.getElementById('loginResult');
+  out.className = 'result';
+  out.textContent = 'Loading...';
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      out.className = 'result ok';
+      out.textContent = '✅ Login working! Welcome ' + data.name + ' (' + data.role + ')';
+    } else {
+      out.className = 'result err';
+      out.textContent = '❌ ' + (data.message || 'Login failed');
+    }
+  } catch (e) {
+    out.className = 'result err';
+    out.textContent = '❌ Error: ' + e.message;
+  }
+}
+</script>
+</body>
+</html>
