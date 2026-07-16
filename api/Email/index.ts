@@ -4,7 +4,7 @@ import { db } from "../../lib/db.js";
 import { emailSettings, users } from "../../lib/schema.js";
 import { requireUser } from "../../lib/auth.js";
 
-const FROM = "Management Task Pro <onboarding@resend.dev>"; // swap once a verified domain is added
+const FROM = "Management Task Pro <noreply@infinityservicesindia.com>";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
