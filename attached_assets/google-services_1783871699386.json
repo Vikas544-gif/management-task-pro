@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "471520653298",
+    "project_id": "iss-task-pro",
+    "storage_bucket": "iss-task-pro.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:471520653298:android:61d21b7b77142ed88d456b",
+        "android_client_info": {
+          "package_name": "com.isstaskpro.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAJNKabxIycpj_m4tUZVLJBrKvuyOjIynA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

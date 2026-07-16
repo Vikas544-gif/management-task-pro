@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "OMozVE9t3l2YwEwucis4J"
+uri = "file://artifacts/iss-mobile/assets/images/icon.png"
+type = "image"
+title = "generated_image"

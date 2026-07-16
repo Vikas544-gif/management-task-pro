@@ -1,0 +1,2044 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.1.0
+  description: ISS Task Pro API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: users
+    description: User/employee operations
+  - name: tasks
+    description: Task operations
+  - name: categories
+    description: Category operations
+  - name: email
+    description: Email settings and sending
+  - name: reports
+    description: Reports
+  - name: notifications
+    description: In-app notifications
+  - name: attendance
+    description: Daily attendance marking
+  - name: agentMetrics
+    description: Per-agent daily performance metrics
+  - name: eod
+    description: End-of-day reports
+  - name: salesMtd
+    description: Per-user month-to-date sales tracking
+  - name: compliance
+    description: Accounts statutory compliance calendar
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List all users
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/credentials:
+    get:
+      operationId: listCredentials
+      tags: [users]
+      summary: List user login credentials (boss or center head)
+      parameters:
+        - name: center
+          in: query
+          required: false
+          schema:
+            type: string
+          description: When provided, only credentials for users in this center are returned (used by Center Heads to scope to their own center).
+        - name: excludeCenter
+          in: query
+          required: false
+          schema:
+            type: string
+          description: When provided, credentials for users in this center are excluded (used by MIS to hide Head Office credentials).
+      responses:
+        "200":
+          description: List of user credentials
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserCredential"
+
+  /users/{id}:
+    put:
+      operationId: updateUser
+      tags: [users]
+      summary: Update a user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Delete a user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required: [success]
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [users]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Login success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserWithToken"
+        "401":
+          description: Unauthorized
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [users]
+      summary: Current authenticated user
+      responses:
+        "200":
+          description: The logged-in user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Not authenticated
+
+  /auth/force-relogin:
+    post:
+      operationId: forceRelogin
+      tags: [users]
+      summary: Force all users to re-login (admin only)
+      responses:
+        "200":
+          description: All outstanding sessions invalidated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        "403":
+          description: Forbidden
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [users]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required: [success]
+
+  /tasks:
+    get:
+      operationId: listTasks
+      tags: [tasks]
+      summary: List tasks
+      parameters:
+        - name: assignedTo
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: type
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: category
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+    post:
+      operationId: createTask
+      tags: [tasks]
+      summary: Create a task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+  /tasks/summary:
+    get:
+      operationId: getTaskSummary
+      tags: [tasks]
+      summary: Dashboard summary stats
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskSummary"
+
+  /tasks/by-category:
+    get:
+      operationId: getTasksByCategory
+      tags: [tasks]
+      summary: Tasks grouped by category
+      responses:
+        "200":
+          description: Grouped
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CategoryCount"
+
+  /tasks/by-user:
+    get:
+      operationId: getTasksByUser
+      tags: [tasks]
+      summary: Tasks grouped by user
+      responses:
+        "200":
+          description: Grouped by user
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserTaskCount"
+
+  /tasks/transfers:
+    get:
+      operationId: listTaskTransfers
+      tags: [tasks]
+      summary: Task reassignment history (scoped)
+      responses:
+        "200":
+          description: Transfers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaskTransfer"
+
+  /tasks/recent:
+    get:
+      operationId: getRecentTasks
+      tags: [tasks]
+      summary: Recent task activity
+      responses:
+        "200":
+          description: Recent tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+
+  /tasks/generate-my-daily:
+    post:
+      operationId: generateMyDailyTasks
+      tags: [tasks]
+      summary: Generate today's occurrences of the caller's own daily tasks (off-day self-serve)
+      responses:
+        "200":
+          description: Number of daily task occurrences created for today
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [created]
+                properties:
+                  created:
+                    type: integer
+
+  /tasks/{id}:
+    get:
+      operationId: getTask
+      tags: [tasks]
+      summary: Get a task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+    put:
+      operationId: updateTask
+      tags: [tasks]
+      summary: Update a task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+    delete:
+      operationId: deleteTask
+      tags: [tasks]
+      summary: Delete a task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required: [success]
+
+  /tasks/{id}/status:
+    patch:
+      operationId: updateTaskStatus
+      tags: [tasks]
+      summary: Update task status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskStatusUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+  /categories:
+    get:
+      operationId: listCategories
+      tags: [categories]
+      summary: List categories
+      responses:
+        "200":
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+    post:
+      operationId: createCategory
+      tags: [categories]
+      summary: Create category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+
+  /categories/{id}:
+    delete:
+      operationId: deleteCategory
+      tags: [categories]
+      summary: Remove a category from the master list
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+
+  /holidays:
+    get:
+      operationId: listHolidays
+      tags: [holidays]
+      summary: List holidays
+      responses:
+        "200":
+          description: Holidays
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Holiday"
+    post:
+      operationId: createHoliday
+      tags: [holidays]
+      summary: Create holiday (Boss only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HolidayInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Holiday"
+
+  /holidays/{id}:
+    delete:
+      operationId: deleteHoliday
+      tags: [holidays]
+      summary: Delete holiday (Boss only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResult"
+
+  /email/settings:
+    get:
+      operationId: getEmailSettings
+      tags: [email]
+      summary: Get email settings
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailSettings"
+
+  /email/test:
+    post:
+      operationId: sendTestEmail
+      tags: [email]
+      summary: Send test email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TestEmailInput"
+      responses:
+        "200":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailResult"
+
+  /email/send-digest-now:
+    post:
+      operationId: sendDigestNow
+      tags: [email]
+      summary: Send the daily task digest to all users now
+      responses:
+        "200":
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DigestResult"
+
+  /email/send-dashboard-now:
+    post:
+      operationId: sendDashboardNow
+      tags: [email]
+      summary: Send the daily dashboard summary to selected people now
+      responses:
+        "200":
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DigestResult"
+
+  /reports/daily:
+    get:
+      operationId: getDailyReport
+      tags: [reports]
+      summary: Daily task report
+      responses:
+        "200":
+          description: Report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+
+  /reports/weekly:
+    get:
+      operationId: getWeeklyReport
+      tags: [reports]
+      summary: Weekly task report
+      responses:
+        "200":
+          description: Report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+
+  /reports/monthly:
+    get:
+      operationId: getMonthlyReport
+      tags: [reports]
+      summary: Monthly task report
+      responses:
+        "200":
+          description: Report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: List notifications for a user
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+
+  /notifications/{id}/read:
+    patch:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark a notification as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+
+  /notifications/{id}:
+    delete:
+      operationId: deleteNotification
+      tags: [notifications]
+      summary: Delete (clear) a single notification
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResult"
+
+  /notifications/read-all:
+    post:
+      operationId: markAllNotificationsRead
+      tags: [notifications]
+      summary: Mark all notifications read for a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarkAllReadInput"
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResult"
+
+  /notifications/clear-all:
+    post:
+      operationId: clearAllNotifications
+      tags: [notifications]
+      summary: Delete (clear) all notifications for a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarkAllReadInput"
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResult"
+
+  /push/vapid-public-key:
+    get:
+      operationId: getVapidPublicKey
+      tags: [push]
+      summary: Public VAPID key for creating a browser push subscription
+      responses:
+        "200":
+          description: The VAPID public key
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [publicKey]
+                properties:
+                  publicKey:
+                    type: string
+
+  /push/subscribe:
+    post:
+      operationId: subscribePush
+      tags: [push]
+      summary: Register this browser for web push notifications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PushSubscribeInput"
+      responses:
+        "200":
+          description: Subscribed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResult"
+
+  /push/expo-subscribe:
+    post:
+      operationId: subscribeExpoPush
+      tags: [push]
+      summary: Register a mobile device for Expo push notifications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExpoPushSubscribeInput"
+      responses:
+        "200":
+          description: Subscribed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResult"
+
+  /push/expo-unsubscribe:
+    post:
+      operationId: unsubscribeExpoPush
+      tags: [push]
+      summary: Remove a mobile device's Expo push token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExpoPushUnsubscribeInput"
+      responses:
+        "200":
+          description: Unsubscribed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResult"
+
+  /push/unsubscribe:
+    post:
+      operationId: unsubscribePush
+      tags: [push]
+      summary: Remove this browser's web push subscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PushUnsubscribeInput"
+      responses:
+        "200":
+          description: Unsubscribed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResult"
+
+  /reports/send:
+    post:
+      operationId: sendReport
+      tags: [reports]
+      summary: Manually trigger report email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendReportInput"
+      responses:
+        "200":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailResult"
+
+  /attendance:
+    get:
+      operationId: listAttendance
+      tags: [attendance]
+      summary: List attendance records
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: center
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: List of attendance records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Attendance"
+    post:
+      operationId: upsertAttendance
+      tags: [attendance]
+      summary: Create or update an attendance record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttendanceInput"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attendance"
+
+  /sales-mtd:
+    get:
+      operationId: listSalesMtd
+      tags: [salesMtd]
+      summary: List sales MTD records for a month
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: List of sales MTD records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SalesMtd"
+    post:
+      operationId: upsertSalesMtd
+      tags: [salesMtd]
+      summary: Create or update a sales MTD record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SalesMtdInput"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesMtd"
+
+  /compliance:
+    get:
+      operationId: getCompliance
+      tags: [compliance]
+      summary: Get the compliance calendar (items + completion statuses)
+      responses:
+        "200":
+          description: Compliance calendar
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceData"
+
+  /compliance/items:
+    post:
+      operationId: createComplianceItem
+      tags: [compliance]
+      summary: Create a compliance master-list item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComplianceItemInput"
+      responses:
+        "200":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceItem"
+
+  /compliance/items/{id}:
+    patch:
+      operationId: updateComplianceItem
+      tags: [compliance]
+      summary: Update or deactivate a compliance master-list item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComplianceItemUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceItem"
+
+  /compliance/companies:
+    get:
+      operationId: listComplianceCompanies
+      tags: [compliance]
+      summary: List the active company master list (available to every user)
+      responses:
+        "200":
+          description: Company master list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ComplianceCompany"
+    post:
+      operationId: createComplianceCompany
+      tags: [compliance]
+      summary: Add a company to the compliance company master list
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComplianceCompanyInput"
+      responses:
+        "200":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceCompany"
+
+  /compliance/companies/{id}:
+    delete:
+      operationId: deleteComplianceCompany
+      tags: [compliance]
+      summary: Remove (soft-deactivate) a company from the compliance master list
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceCompany"
+
+  /compliance/status:
+    post:
+      operationId: toggleComplianceStatus
+      tags: [compliance]
+      summary: Set the completion status of a compliance activity for a company and period
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComplianceStatusInput"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceStatus"
+
+  /agent-metrics:
+    get:
+      operationId: listAgentMetrics
+      tags: [agentMetrics]
+      summary: List agent metrics records
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: agentId
+          in: query
+          schema:
+            type: ["integer", "null"]
+      responses:
+        "200":
+          description: List of agent metrics records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentMetric"
+    post:
+      operationId: upsertAgentMetric
+      tags: [agentMetrics]
+      summary: Create or update an agent metrics record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentMetricInput"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentMetric"
+
+  /eod:
+    get:
+      operationId: listEodReports
+      tags: [eod]
+      summary: List EOD reports
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: center
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: List of EOD reports
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EodReport"
+    post:
+      operationId: upsertEodReport
+      tags: [eod]
+      summary: Create or update an EOD report
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EodReportInput"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EodReport"
+
+components:
+  schemas:
+    Attendance:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        userName:
+          type: ["string", "null"]
+        date:
+          type: string
+        status:
+          type: string
+        center:
+          type: ["string", "null"]
+        markedBy:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, userId, date, status, createdAt, updatedAt]
+
+    AttendanceInput:
+      type: object
+      properties:
+        userId:
+          type: integer
+        date:
+          type: string
+        status:
+          type: string
+        center:
+          type: ["string", "null"]
+        markedBy:
+          type: ["integer", "null"]
+      required: [userId, date, status]
+
+    SalesMtd:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        userName:
+          type: ["string", "null"]
+        month:
+          type: string
+        amount:
+          type: ["integer", "null"]
+        target:
+          type: ["integer", "null"]
+        lastDate:
+          type: ["string", "null"]
+        updatedBy:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, userId, month, createdAt, updatedAt]
+
+    SalesMtdInput:
+      type: object
+      properties:
+        userId:
+          type: integer
+        month:
+          type: string
+        amount:
+          type: ["integer", "null"]
+        target:
+          type: ["integer", "null"]
+        lastDate:
+          type: ["string", "null"]
+        updatedBy:
+          type: ["integer", "null"]
+      required: [userId, month]
+
+    ComplianceItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        compliance:
+          type: string
+        activity:
+          type: ["string", "null"]
+        dueDateText:
+          type: ["string", "null"]
+        frequency:
+          type: string
+        companies:
+          type: array
+          items:
+            type: string
+        assignedTo:
+          type: ["integer", "null"]
+        assignedToName:
+          type: ["string", "null"]
+        sortOrder:
+          type: integer
+        active:
+          type: boolean
+        createdAt:
+          type: string
+      required: [id, compliance, frequency, companies, sortOrder, active, createdAt]
+
+    ComplianceItemInput:
+      type: object
+      properties:
+        compliance:
+          type: string
+        activity:
+          type: ["string", "null"]
+        dueDateText:
+          type: ["string", "null"]
+        frequency:
+          type: string
+        companies:
+          type: array
+          items:
+            type: string
+        assignedTo:
+          type: ["integer", "null"]
+        sortOrder:
+          type: ["integer", "null"]
+      required: [compliance, frequency, companies]
+
+    ComplianceItemUpdate:
+      type: object
+      properties:
+        compliance:
+          type: string
+        activity:
+          type: ["string", "null"]
+        dueDateText:
+          type: ["string", "null"]
+        frequency:
+          type: string
+        companies:
+          type: array
+          items:
+            type: string
+        assignedTo:
+          type: ["integer", "null"]
+        sortOrder:
+          type: integer
+        active:
+          type: boolean
+
+    ComplianceStatus:
+      type: object
+      properties:
+        id:
+          type: integer
+        itemId:
+          type: integer
+        company:
+          type: string
+        periodKey:
+          type: string
+        done:
+          type: boolean
+        doneBy:
+          type: ["integer", "null"]
+        doneAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, itemId, company, periodKey, done, createdAt, updatedAt]
+
+    ComplianceCompany:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        sortOrder:
+          type: integer
+        active:
+          type: boolean
+        createdAt:
+          type: string
+      required: [id, name, sortOrder, active, createdAt]
+
+    ComplianceCompanyInput:
+      type: object
+      properties:
+        name:
+          type: string
+      required: [name]
+
+    ComplianceData:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComplianceItem"
+        statuses:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComplianceStatus"
+        companies:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComplianceCompany"
+      required: [items, statuses, companies]
+
+    ComplianceStatusInput:
+      type: object
+      properties:
+        itemId:
+          type: integer
+        company:
+          type: string
+        periodKey:
+          type: string
+        done:
+          type: boolean
+        doneBy:
+          type: ["integer", "null"]
+      required: [itemId, company, periodKey, done]
+
+    AgentMetric:
+      type: object
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: integer
+        date:
+          type: string
+        dc:
+          type: ["integer", "null"]
+        prospectCount:
+          type: ["integer", "null"]
+        salesFd:
+          type: ["integer", "null"]
+        salesMtd:
+          type: ["integer", "null"]
+        target:
+          type: ["integer", "null"]
+        last3mAvg:
+          type: ["integer", "null"]
+        last6mAvg:
+          type: ["integer", "null"]
+        remark:
+          type: ["string", "null"]
+        updatedBy:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, agentId, date, createdAt, updatedAt]
+
+    AgentMetricInput:
+      type: object
+      properties:
+        agentId:
+          type: integer
+        date:
+          type: string
+        dc:
+          type: ["integer", "null"]
+        prospectCount:
+          type: ["integer", "null"]
+        salesFd:
+          type: ["integer", "null"]
+        salesMtd:
+          type: ["integer", "null"]
+        target:
+          type: ["integer", "null"]
+        last3mAvg:
+          type: ["integer", "null"]
+        last6mAvg:
+          type: ["integer", "null"]
+        remark:
+          type: ["string", "null"]
+        updatedBy:
+          type: ["integer", "null"]
+      required: [agentId, date]
+
+    EodReport:
+      type: object
+      properties:
+        id:
+          type: integer
+        center:
+          type: string
+        date:
+          type: string
+        salesFd:
+          type: integer
+        salesMtd:
+          type: integer
+        dc:
+          type: integer
+        hc:
+          type: integer
+        present:
+          type: integer
+        absent:
+          type: integer
+        attrition:
+          type: integer
+        notes:
+          type: ["string", "null"]
+        submittedBy:
+          type: integer
+        submittedByName:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, center, date, salesFd, salesMtd, dc, hc, present, absent, attrition, submittedBy, createdAt, updatedAt]
+
+    EodReportInput:
+      type: object
+      properties:
+        center:
+          type: string
+        date:
+          type: string
+        salesFd:
+          type: integer
+        salesMtd:
+          type: integer
+        dc:
+          type: integer
+        hc:
+          type: integer
+        present:
+          type: integer
+        absent:
+          type: integer
+        attrition:
+          type: integer
+        notes:
+          type: ["string", "null"]
+        submittedBy:
+          type: integer
+      required: [center, date, salesFd, salesMtd, dc, hc, present, absent, attrition, submittedBy]
+
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required: [status]
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        role:
+          type: string
+        username:
+          type: ["string", "null"]
+        department:
+          type: string
+        center:
+          type: string
+        reportsTo:
+          type: ["integer", "null"]
+        reportsToName:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        doj:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [Active, Inactive]
+        assignable:
+          type: boolean
+        autoTasksEnabled:
+          type: boolean
+        pagePermissions:
+          type: ["array", "null"]
+          items:
+            type: string
+        centerPermissions:
+          type: ["array", "null"]
+          items:
+            type: string
+        assignVisibleUserIds:
+          type: ["array", "null"]
+          items:
+            type: integer
+        createdAt:
+          type: string
+      required: [id, name, role, department]
+
+    UserWithToken:
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - type: object
+          properties:
+            token:
+              type: string
+              description: Signed bearer token for mobile clients (web ignores this).
+
+    UserInput:
+      type: object
+      properties:
+        name:
+          type: string
+        role:
+          type: string
+        username:
+          type: ["string", "null"]
+        password:
+          type: ["string", "null"]
+        department:
+          type: string
+        center:
+          type: string
+        reportsTo:
+          type: ["integer", "null"]
+        email:
+          type: ["string", "null"]
+        doj:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [Active, Inactive]
+      required: [name, role, department]
+
+    UserUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        role:
+          type: string
+        username:
+          type: string
+        department:
+          type: string
+        center:
+          type: string
+        reportsTo:
+          type: ["integer", "null"]
+        email:
+          type: ["string", "null"]
+        doj:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [Active, Inactive]
+        assignable:
+          type: boolean
+        autoTasksEnabled:
+          type: boolean
+        pagePermissions:
+          type: ["array", "null"]
+          items:
+            type: string
+        centerPermissions:
+          type: ["array", "null"]
+          items:
+            type: string
+        assignVisibleUserIds:
+          type: ["array", "null"]
+          items:
+            type: integer
+        password:
+          type: string
+
+    UserCredential:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        username:
+          type: string
+        password:
+          type: string
+      required: [id, name, username, password]
+
+    LoginInput:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+      required: [username, password]
+
+    Task:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        assignedTo:
+          type: ["integer", "null"]
+        assignedToName:
+          type: ["string", "null"]
+        assignedToEmail:
+          type: ["string", "null"]
+        assignedBy:
+          type: ["integer", "null"]
+        assignedByName:
+          type: ["string", "null"]
+        dueDate:
+          type: ["string", "null"]
+        dueTime:
+          type: ["string", "null"]
+        priority:
+          type: string
+        status:
+          type: string
+        type:
+          type: string
+        category:
+          type: ["string", "null"]
+        department:
+          type: ["string", "null"]
+        remark:
+          type: ["string", "null"]
+        complianceItemId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, title, priority, status, type, createdAt, updatedAt]
+
+    TaskInput:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        assignedTo:
+          type: ["integer", "null"]
+        assignedBy:
+          type: ["integer", "null"]
+        dueDate:
+          type: ["string", "null"]
+        dueTime:
+          type: ["string", "null"]
+        priority:
+          type: string
+        type:
+          type: string
+        category:
+          type: ["string", "null"]
+        department:
+          type: ["string", "null"]
+        remark:
+          type: ["string", "null"]
+        sendEmail:
+          type: boolean
+      required: [title, priority, type]
+
+    TaskUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        assignedTo:
+          type: ["integer", "null"]
+        assignedBy:
+          type: ["integer", "null"]
+        dueDate:
+          type: ["string", "null"]
+        dueTime:
+          type: ["string", "null"]
+        priority:
+          type: string
+        status:
+          type: string
+        type:
+          type: string
+        category:
+          type: ["string", "null"]
+        department:
+          type: ["string", "null"]
+        remark:
+          type: ["string", "null"]
+
+    TaskStatusUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+      required: [status]
+
+    TaskSummary:
+      type: object
+      properties:
+        total:
+          type: integer
+        pending:
+          type: integer
+        inProgress:
+          type: integer
+        done:
+          type: integer
+        overdue:
+          type: integer
+        daily:
+          type: integer
+        weekly:
+          type: integer
+        monthly:
+          type: integer
+      required: [total, pending, inProgress, done, overdue, daily, weekly, monthly]
+
+    CategoryCount:
+      type: object
+      properties:
+        category:
+          type: string
+        count:
+          type: integer
+        done:
+          type: integer
+      required: [category, count, done]
+
+    UserTaskCount:
+      type: object
+      properties:
+        userId:
+          type: integer
+        name:
+          type: string
+        department:
+          type: string
+        total:
+          type: integer
+        done:
+          type: integer
+        pending:
+          type: integer
+        transferredAway:
+          type: integer
+        transferredIn:
+          type: integer
+      required: [userId, name, department, total, done, pending]
+
+    Holiday:
+      type: object
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+        name:
+          type: string
+        day:
+          type: string
+        type:
+          type: string
+      required: [id, date, name, day, type]
+
+    HolidayInput:
+      type: object
+      properties:
+        date:
+          type: string
+        name:
+          type: string
+        day:
+          type: string
+        type:
+          type: string
+      required: [date, name, day, type]
+
+    TaskTransfer:
+      type: object
+      properties:
+        id:
+          type: integer
+        taskId:
+          type: integer
+        taskTitle:
+          type: ["string", "null"]
+        fromUserId:
+          type: integer
+        fromUserName:
+          type: ["string", "null"]
+        toUserId:
+          type: integer
+        toUserName:
+          type: ["string", "null"]
+        transferredBy:
+          type: ["integer", "null"]
+        transferredByName:
+          type: ["string", "null"]
+        taskStatus:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [id, taskId, fromUserId, toUserId, createdAt]
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        color:
+          type: string
+      required: [id, name, color]
+
+    CategoryInput:
+      type: object
+      properties:
+        name:
+          type: string
+        color:
+          type: string
+      required: [name]
+
+    EmailSettings:
+      type: object
+      properties:
+        id:
+          type: integer
+        smtpEmail:
+          type: string
+        smtpHost:
+          type: string
+        smtpPort:
+          type: integer
+        configured:
+          type: boolean
+      required: [configured]
+
+    TestEmailInput:
+      type: object
+      properties:
+        toEmail:
+          type: string
+      required: [toEmail]
+
+    EmailResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required: [success, message]
+
+    DigestResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        sent:
+          type: integer
+        eligible:
+          type: integer
+        skippedNoEmail:
+          type: integer
+        failedSend:
+          type: integer
+      required: [success, message, sent, eligible, skippedNoEmail, failedSend]
+
+    Report:
+      type: object
+      properties:
+        period:
+          type: string
+        from:
+          type: string
+        to:
+          type: string
+        totalTasks:
+          type: integer
+        completedTasks:
+          type: integer
+        pendingTasks:
+          type: integer
+        overdueTask:
+          type: integer
+        byCategory:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryCount"
+        byUser:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserTaskCount"
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"
+      required: [period, from, to, totalTasks, completedTasks, pendingTasks, overdueTask, byCategory, byUser, tasks]
+
+    SendReportInput:
+      type: object
+      properties:
+        type:
+          type: string
+        toEmail:
+          type: ["string", "null"]
+      required: [type]
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        type:
+          type: string
+        message:
+          type: string
+        taskId:
+          type: ["integer", "null"]
+        read:
+          type: boolean
+        createdAt:
+          type: string
+      required: [id, userId, type, message, read, createdAt]
+
+    MarkAllReadInput:
+      type: object
+      properties:
+        userId:
+          type: integer
+      required: [userId]
+
+    PushSubscribeInput:
+      type: object
+      required: [endpoint, keys]
+      properties:
+        endpoint:
+          type: string
+        keys:
+          type: object
+          required: [p256dh, auth]
+          properties:
+            p256dh:
+              type: string
+            auth:
+              type: string
+
+    PushUnsubscribeInput:
+      type: object
+      required: [endpoint]
+      properties:
+        endpoint:
+          type: string
+
+    ExpoPushSubscribeInput:
+      type: object
+      required: [userId, token]
+      properties:
+        userId:
+          type: integer
+        token:
+          type: string
+
+    ExpoPushUnsubscribeInput:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+
+    SuccessResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+      required: [success]

@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Management Task Pro"
+version = "1.0.0"
+id = "artifacts/iss-task-pro"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18633
+
+[services.development]
+run = "pnpm --filter @workspace/iss-task-pro run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/iss-task-pro", "run", "build" ]
+publicDir = "artifacts/iss-task-pro/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18633"
+BASE_PATH = "/"

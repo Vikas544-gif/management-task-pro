@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/sales-dashboard/"
+title = "Infinity Sales Performance Dashboard"
+version = "1.0.0"
+id = "artifacts/sales-dashboard"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/sales-dashboard/" ]
+localPort = 18816
+
+[services.development]
+run = "pnpm --filter @workspace/sales-dashboard run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/sales-dashboard", "run", "build" ]
+publicDir = "artifacts/sales-dashboard/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18816"
+BASE_PATH = "/sales-dashboard/"
