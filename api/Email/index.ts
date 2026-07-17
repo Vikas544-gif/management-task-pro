@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { Resend } from "resend";
+import { eq } from "drizzle-orm";
 import { db } from "../../lib/db.js";
 import { emailSettings, users } from "../../lib/schema.js";
 import { requireUser } from "../../lib/auth.js";
@@ -68,7 +69,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (action === "dashboard") {
       const [settings] = await db.select().from(emailSettings).limit(1);
-      const recipients = settings?.dashboardRecipients?.length ? settings.dashboardRecipients : [me.email].filter(Boolean);
+      let recipients: string[] = settings?.dashboardRecipients?.length ? settings.dashboardRecipients : [];
+      if (!recipients.length) {
+        const [meRow] = await db.select().from(users).where(eq(users.id, me.id)).limit(1);
+        recipients = [meRow?.email].filter((e): e is string => Boolean(e));
+      }
       if (!recipients.length) return res.status(400).json({ message: "No recipients configured" });
       for (const to of recipients) {
         try {
