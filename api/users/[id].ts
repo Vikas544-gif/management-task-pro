@@ -24,7 +24,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json(safe);
   }
 
-  if (req.method === "PATCH") {
+  if (req.method === "PATCH" || req.method === "PUT") {
     const { name, email, role, department, center, reportsTo, active, password } = req.body || {};
     const update: Record<string, unknown> = {};
     if (name !== undefined) update.name = name;
