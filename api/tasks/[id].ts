@@ -6,7 +6,7 @@ import { requireUser } from "../../lib/auth.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, PATCH, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, PATCH, PUT, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(204).end();
 
@@ -22,7 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json(task);
   }
 
-  if (req.method === "PATCH") {
+  if (req.method === "PATCH" || req.method === "PUT") {
     const {
       title, description, status, priority, dueDate, reminderTime,
       type, category, department, company, remark, sendEmailNotification,
