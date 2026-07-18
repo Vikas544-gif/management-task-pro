@@ -72,6 +72,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             subject: `Task assigned to you: ${updated?.title ?? "Task"}`,
             html: `<p>Hi ${assignee.name},</p>
               <p>A task has been assigned to you: <strong>${updated?.title ?? ""}</strong></p>
+              <p>Assigned by: ${me.name}</p>
               <p>Priority: ${updated?.priority ?? "medium"}</p>`,
           });
         } catch (e) {

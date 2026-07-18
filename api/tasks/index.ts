@@ -66,6 +66,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             subject: `New task assigned: ${title}`,
             html: `<p>Hi ${assignee.name},</p>
               <p>You've been assigned a new task: <strong>${title}</strong></p>
+              <p>Assigned by: ${me.name}</p>
               ${description ? `<p>${description}</p>` : ""}
               ${dueDate ? `<p>Due: ${dueDate}</p>` : ""}
               <p>Priority: ${priority || "medium"}</p>`,
