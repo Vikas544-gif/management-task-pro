@@ -7,6 +7,7 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(), // bcrypt hash
+  passwordPlain: text("password_plain"), // readable copy, shown to Boss/Center Head in Credentials page
   name: text("name").notNull(),
   email: text("email"),
   role: text("role").notNull().default("Employee"), // Boss, Center Head, Employee...

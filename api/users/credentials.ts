@@ -49,7 +49,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const result = filtered
     .filter((u) => !!u.username)
-    .map((u) => ({ id: u.id, name: u.name, username: u.username, password: u.password }));
+    .map((u) => ({
+      id: u.id,
+      name: u.name,
+      username: u.username,
+      // Prefer the readable copy. Legacy rows that pre-date this column store
+      // plaintext directly in `password` (never bcrypt-hashed) — detect that
+      // by checking for the bcrypt prefix. Anything else (a real hash with no
+      // known plaintext) shows a placeholder instead of the hash itself.
+      password: u.passwordPlain ?? (u.password && !u.password.startsWith("$2") ? u.password : "(hidden — reset to reveal)"),
+    }));
 
   return res.status(200).json(result);
 }

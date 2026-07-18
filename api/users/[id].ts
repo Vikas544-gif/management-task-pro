@@ -20,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
     const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
     if (!user) return res.status(404).json({ message: "User not found" });
-    const { password, ...safe } = user;
+    const { password, passwordPlain, ...safe } = user;
     return res.status(200).json(safe);
   }
 
@@ -34,11 +34,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (center !== undefined) update.center = center;
     if (reportsTo !== undefined) update.reportsTo = reportsTo;
     if (active !== undefined) update.active = active;
-    if (password) update.password = await bcrypt.hash(password, 10);
+    if (password) {
+      update.password = await bcrypt.hash(password, 10);
+      update.passwordPlain = password;
+    }
 
     const [updated] = await db.update(users).set(update).where(eq(users.id, id)).returning();
     if (!updated) return res.status(404).json({ message: "User not found" });
-    const { password: _pw, ...safe } = updated;
+    const { password: _pw, passwordPlain: _pwp, ...safe } = updated;
     return res.status(200).json(safe);
   }
 

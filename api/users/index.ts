@@ -16,7 +16,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
     const all = await db.select().from(users);
     // Never send password hashes to the client.
-    const safe = all.map(({ password, ...rest }) => rest);
+    const safe = all.map(({ password, passwordPlain, ...rest }) => rest);
     return res.status(200).json(safe);
   }
 
@@ -32,6 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .values({
           username,
           password: hash,
+          passwordPlain: password,
           name,
           email: email || null,
           role: role || "Employee",
@@ -40,7 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           reportsTo: reportsTo ?? null,
         })
         .returning();
-      const { password: _pw, ...safe } = created;
+      const { password: _pw, passwordPlain: _pwp, ...safe } = created;
       return res.status(201).json(safe);
     } catch (e: any) {
       if (String(e?.message || "").includes("unique")) {
