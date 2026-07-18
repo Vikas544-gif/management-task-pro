@@ -1,8 +1,11 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { eq } from "drizzle-orm";
+import { Resend } from "resend";
 import { db } from "../../lib/db.js";
-import { tasks, taskTransfers } from "../../lib/schema.js";
+import { tasks, taskTransfers, users } from "../../lib/schema.js";
 import { requireUser } from "../../lib/auth.js";
+
+const FROM = "Management Task Pro <noreply@infinityservicesindia.com>";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -57,6 +60,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const [updated] = await db.update(tasks).set(update).where(eq(tasks.id, id)).returning();
+
+    if (assignedTo !== undefined && assignedTo !== existing.assignedTo && assignedTo && process.env.RESEND_API_KEY) {
+      const [assignee] = await db.select().from(users).where(eq(users.id, assignedTo)).limit(1);
+      if (assignee?.email) {
+        try {
+          const resend = new Resend(process.env.RESEND_API_KEY);
+          await resend.emails.send({
+            from: FROM,
+            to: assignee.email,
+            subject: `Task assigned to you: ${updated?.title ?? "Task"}`,
+            html: `<p>Hi ${assignee.name},</p>
+              <p>A task has been assigned to you: <strong>${updated?.title ?? ""}</strong></p>
+              <p>Priority: ${updated?.priority ?? "medium"}</p>`,
+          });
+        } catch (e) {
+          console.error("Task reassignment email failed:", e);
+        }
+      }
+    }
+
     return res.status(200).json(updated);
   }
 

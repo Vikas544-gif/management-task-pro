@@ -1,8 +1,11 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { eq } from "drizzle-orm";
+import { Resend } from "resend";
 import { db } from "../../lib/db.js";
 import { tasks, users } from "../../lib/schema.js";
 import { requireUser } from "../../lib/auth.js";
+
+const FROM = "Management Task Pro <noreply@infinityservicesindia.com>";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -51,6 +54,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sendEmailNotification: sendEmailNotification ?? true,
       })
       .returning();
+
+    if ((sendEmailNotification ?? true) && assignedTo && process.env.RESEND_API_KEY) {
+      const [assignee] = await db.select().from(users).where(eq(users.id, assignedTo)).limit(1);
+      if (assignee?.email) {
+        try {
+          const resend = new Resend(process.env.RESEND_API_KEY);
+          await resend.emails.send({
+            from: FROM,
+            to: assignee.email,
+            subject: `New task assigned: ${title}`,
+            html: `<p>Hi ${assignee.name},</p>
+              <p>You've been assigned a new task: <strong>${title}</strong></p>
+              ${description ? `<p>${description}</p>` : ""}
+              ${dueDate ? `<p>Due: ${dueDate}</p>` : ""}
+              <p>Priority: ${priority || "medium"}</p>`,
+          });
+        } catch (e) {
+          console.error("Task assignment email failed:", e);
+        }
+      }
+    }
 
     return res.status(201).json(created);
   }
