@@ -16,12 +16,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const me = requireUser(req, res);
   if (!me) return;
 
-  // Catch-all route: /api/email/settings, /api/email/test,
-  // /api/email/send-digest-now, /api/email/send-dashboard-now
-  const pathParts = ([] as string[]).concat((req.query.path as string | string[]) || []);
-  const route = pathParts.join("/");
+  const route = String(req.query.route || "");
 
-  // ── GET /api/email/settings ─────────────────────────────────────────
   if (route === "settings" && req.method === "GET") {
     const [row] = await db.select().from(emailSettings).limit(1);
     const configured = Boolean(process.env.RESEND_API_KEY);
@@ -37,7 +33,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   const resend = new Resend(process.env.RESEND_API_KEY);
 
-  // ── POST /api/email/test ────────────────────────────────────────────
   if (route === "test" && req.method === "POST") {
     const { toEmail } = req.body || {};
     if (!toEmail) return res.status(400).json({ success: false, message: "Recipient email is required" });
@@ -54,7 +49,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // ── POST /api/email/send-digest-now ─────────────────────────────────
   if (route === "send-digest-now" && req.method === "POST") {
     const pendingTasks = await db.select().from(tasks).where(ne(tasks.status, "done"));
     const allUsers = await db.select().from(users);
@@ -95,7 +89,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  // ── POST /api/email/send-dashboard-now ──────────────────────────────
   if (route === "send-dashboard-now" && req.method === "POST") {
     const [settings] = await db.select().from(emailSettings).limit(1);
     let recipients: string[] = settings?.dashboardRecipients?.length ? settings.dashboardRecipients : [];
