@@ -81,10 +81,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    return res.status(200).json(updated);
-  }
+    if (status === "done" && existing.status !== "done" && existing.assignedBy && process.env.RESEND_API_KEY) {
+      const [assigner] = await db.select().from(users).where(eq(users.id, existing.assignedBy)).limit(1);
+      if (assigner?.email) {
+        try {
+          const resend = new Resend(process.env.RESEND_API_KEY);
+          await resend.emails.send({
+            from: FROM,
+            to: assigner.email,
+            subject: `Task completed: ${existing.title}`,
+            html: `<p>Hi ${assigner.name},</p>
+              <p><strong>${existing.title}</strong> has been marked complete by ${me.name}.</p>`,
+          });
+        } catch (e) {
+          console.error("Task completion email failed:", e);
+        }
+      }
+    }
 
-  if (req.method === "DELETE") {
+    return res.status(200).json(updated);
     const [deleted] = await db.delete(tasks).where(eq(tasks.id, id)).returning();
     if (!deleted) return res.status(404).json({ message: "Task not found" });
     return res.status(200).json({ message: "Task deleted" });

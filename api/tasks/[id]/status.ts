@@ -1,8 +1,11 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { eq } from "drizzle-orm";
+import { Resend } from "resend";
 import { db } from "../../../lib/db.js";
-import { tasks } from "../../../lib/schema.js";
+import { tasks, users } from "../../../lib/schema.js";
 import { requireUser } from "../../../lib/auth.js";
+
+const FROM = "Management Task Pro <noreply@infinityservicesindia.com>";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -27,6 +30,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (remark !== undefined) update.remark = remark;
 
     const [updated] = await db.update(tasks).set(update).where(eq(tasks.id, id)).returning();
+
+    if (status === "done" && existing.status !== "done" && existing.assignedBy && process.env.RESEND_API_KEY) {
+      const [assigner] = await db.select().from(users).where(eq(users.id, existing.assignedBy)).limit(1);
+      if (assigner?.email) {
+        try {
+          const resend = new Resend(process.env.RESEND_API_KEY);
+          await resend.emails.send({
+            from: FROM,
+            to: assigner.email,
+            subject: `Task completed: ${existing.title}`,
+            html: `<p>Hi ${assigner.name},</p>
+              <p><strong>${existing.title}</strong> has been marked complete by ${me.name}.</p>`,
+          });
+        } catch (e) {
+          console.error("Task completion email failed:", e);
+        }
+      }
+    }
+
     return res.status(200).json(updated);
   }
 
