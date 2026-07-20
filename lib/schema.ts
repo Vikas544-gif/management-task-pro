@@ -107,6 +107,16 @@ export const emailSettings = pgTable("email_settings", {
 });
 
 // ── Access control: per-role/per-user page permissions ──────────────────
+// ── Push notification subscriptions (browser "Laptop popup" background push) ──
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const accessControl = pgTable("access_control", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),

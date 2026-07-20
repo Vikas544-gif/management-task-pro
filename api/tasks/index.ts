@@ -4,6 +4,7 @@ import { Resend } from "resend";
 import { db } from "../../lib/db.js";
 import { tasks, users } from "../../lib/schema.js";
 import { requireUser } from "../../lib/auth.js";
+import { sendPushToUser } from "../../lib/webPush.js";
 
 const FROM = "Management Task Pro <noreply@infinityservicesindia.com>";
 
@@ -54,6 +55,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sendEmailNotification: sendEmailNotification ?? true,
       })
       .returning();
+
+    if (assignedTo) {
+      void sendPushToUser(assignedTo, "New task assigned", `${title} — assigned by ${me.name}`);
+    }
 
     if ((sendEmailNotification ?? true) && assignedTo && process.env.RESEND_API_KEY) {
       const [assignee] = await db.select().from(users).where(eq(users.id, assignedTo)).limit(1);
