@@ -4,6 +4,9 @@
     { "source": "/api/email/test", "destination": "/api/email/handler?route=test" },
     { "source": "/api/email/send-digest-now", "destination": "/api/email/handler?route=send-digest-now" },
     { "source": "/api/email/send-dashboard-now", "destination": "/api/email/handler?route=send-dashboard-now" },
+    { "source": "/api/push/vapid-public-key", "destination": "/api/push/handler?route=vapid-public-key" },
+    { "source": "/api/push/subscribe", "destination": "/api/push/handler?route=subscribe" },
+    { "source": "/api/push/unsubscribe", "destination": "/api/push/handler?route=unsubscribe" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

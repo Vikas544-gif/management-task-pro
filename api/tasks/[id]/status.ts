@@ -4,6 +4,7 @@ import { Resend } from "resend";
 import { db } from "../../../lib/db.js";
 import { tasks, users } from "../../../lib/schema.js";
 import { requireUser } from "../../../lib/auth.js";
+import { sendPushToUser } from "../../../lib/webPush.js";
 
 const FROM = "Management Task Pro <noreply@infinityservicesindia.com>";
 
@@ -30,6 +31,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (remark !== undefined) update.remark = remark;
 
     const [updated] = await db.update(tasks).set(update).where(eq(tasks.id, id)).returning();
+
+    if (status === "done" && existing.status !== "done" && existing.assignedBy) {
+      void sendPushToUser(existing.assignedBy, "Task completed", `${existing.title} — completed by ${me.name}`);
+    }
 
     if (status === "done" && existing.status !== "done" && existing.assignedBy && process.env.RESEND_API_KEY) {
       const [assigner] = await db.select().from(users).where(eq(users.id, existing.assignedBy)).limit(1);

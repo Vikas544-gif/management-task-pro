@@ -4,9 +4,25 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm --filter @workspace/api-server run dev",
-    "typecheck": "pnpm -r run typecheck",
-    "build": "pnpm run typecheck && pnpm -r run build",
-    "db:push": "pnpm --filter @workspace/db run push"
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "bcryptjs": "^2.4.3",
+    "cookie": "^1.0.2",
+    "drizzle-orm": "^0.36.4",
+    "jsonwebtoken": "^9.0.2",
+    "resend": "^4.0.1",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^22.10.1",
+    "@types/web-push": "^3.6.4",
+    "@vercel/node": "^3.2.24",
+    "drizzle-kit": "^0.28.1",
+    "typescript": "^5.7.2"
   }
 }
