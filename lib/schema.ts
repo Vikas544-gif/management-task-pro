@@ -113,3 +113,12 @@ export const accessControl = pgTable("access_control", {
   page: text("page").notNull(), // e.g. "reports", "access-control"
   allowed: boolean("allowed").notNull().default(true),
 });
+// ── Notifications ────────────────────────────────────────────────────────
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  title: text("title").notNull(),
+  message: text("message"),
+  read: boolean("read").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
