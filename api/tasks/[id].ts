@@ -109,6 +109,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     return res.status(200).json(updated);
+  }
+
+  if (req.method === "DELETE") {
     const [deleted] = await db.delete(tasks).where(eq(tasks.id, id)).returning();
     if (!deleted) return res.status(404).json({ message: "Task not found" });
     return res.status(200).json({ message: "Task deleted" });
