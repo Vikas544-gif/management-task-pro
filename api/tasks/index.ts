@@ -97,4 +97,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   return res.status(405).json({ message: "Method not allowed" });
-}
+}if (assignedTo) {
+      // In-app bell notification (notifications table)
+      try {
+        await db.insert(notifications).values({
+          userId: assignedTo,
+          title: `New task assigned: ${title}`,
+          message: `${title} — assigned by ${me.name}${dueDate ? ` (due ${dueDate})` : ""}`,
+          type: "task_assigned",
+          taskId: created.id,
+        });
+      } catch (e) {
+        console.error("Failed to create in-app notification:", e);
+      }
+
+      // Browser push notification
+      void sendPushToUser(assignedTo, "New task assigned", `${title} — assigned by ${me.name}`);
+    }
