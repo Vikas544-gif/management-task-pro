@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "PATCH" || req.method === "PUT") {
-    const { name, email, role, department, center, reportsTo, active, password } = req.body || {};
+    const { name, email, role, department, center, reportsTo, active, password, centerPermissions } = req.body || {};
     const update: Record<string, unknown> = {};
     if (name !== undefined) update.name = name;
     if (email !== undefined) update.email = email;
@@ -34,9 +34,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (center !== undefined) update.center = center;
     if (reportsTo !== undefined) update.reportsTo = reportsTo;
     if (active !== undefined) update.active = active;
+    if (centerPermissions !== undefined) update.centerPermissions = centerPermissions;
     if (password) {
       update.password = await bcrypt.hash(password, 10);
       update.passwordPlain = password;
+    }
+
+    if (Object.keys(update).length === 0) {
+      const [current] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+      if (!current) return res.status(404).json({ message: "User not found" });
+      const { password: _pw, passwordPlain: _pwp, ...safe } = current;
+      return res.status(200).json(safe);
     }
 
     const [updated] = await db.update(users).set(update).where(eq(users.id, id)).returning();
