@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { eq } from "drizzle-orm";
 import { Resend } from "resend";
 import { db } from "../../lib/db.js";
-import { tasks, users } from "../../lib/schema.js";
+import { tasks, users, notifications } from "../../lib/schema.js";
 import { requireUser } from "../../lib/auth.js";
 import { sendPushToUser } from "../../lib/webPush.js";
 
@@ -21,7 +21,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const allTasks = await db.select().from(tasks);
     const allUsers = await db.select().from(users);
     const nameOf = new Map(allUsers.map((u) => [u.id, u.name]));
-    // The frontend expects assignedByName / assignedToName alongside the ids.
     const enriched = allTasks.map((t) => ({
       ...t,
       assignedByName: t.assignedBy != null ? nameOf.get(t.assignedBy) ?? null : null,
@@ -57,6 +56,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .returning();
 
     if (assignedTo) {
+      // In-app bell notification (notifications table)
+      try {
+        await db.insert(notifications).values({
+          userId: assignedTo,
+          title: `New task assigned: ${title}`,
+          message: `Assigned by ${me.name}${dueDate ? ` — due ${dueDate}` : ""}`,
+        });
+      } catch (e) {
+        console.error("Failed to create in-app notification:", e);
+      }
+
+      // Browser push notification
       void sendPushToUser(assignedTo, "New task assigned", `${title} — assigned by ${me.name}`);
     }
 
