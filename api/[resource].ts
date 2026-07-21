@@ -161,6 +161,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ── NOTIFICATIONS ───────────────────────────────────────────────────
   if (resource === "notifications") {
+    const action = String(req.query.action || "");
+
+    if (action === "clear-all" && req.method === "POST") {
+      await db.delete(notifications).where(eq(notifications.userId, me.id));
+      return res.status(200).json({ success: true });
+    }
+
+    if (action === "mark-all-read" && req.method === "POST") {
+      await db.update(notifications).set({ read: true }).where(eq(notifications.userId, me.id));
+      return res.status(200).json({ success: true });
+    }
+
     if (req.method === "GET") {
       const { userId } = req.query;
       const targetId = userId ? Number(userId) : me.id;
