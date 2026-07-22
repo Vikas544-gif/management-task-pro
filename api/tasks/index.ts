@@ -69,8 +69,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.error("Failed to create in-app notification:", e);
       }
 
-      // Browser push notification
-      void sendPushToUser(assignedTo, "New task assigned", `${title} — assigned by ${me.name}`);
+      // Browser push notification (awaited so Vercel does not freeze the
+      // function before the network call to the push service completes)
+      try {
+        await sendPushToUser(assignedTo, "New task assigned", `${title} — assigned by ${me.name}`);
+      } catch (e) {
+        console.error("Push send failed:", e);
+      }
     }
 
     if ((sendEmailNotification ?? true) && assignedTo && process.env.RESEND_API_KEY) {
