@@ -55,12 +55,10 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
   const desktopOnRef = useRef(desktopOn);
   desktopOnRef.current = desktopOn;
 
-  // Reset the "already seen" set on user switch so we don't replay/cross over.
   useEffect(() => {
     seenIds.current = null;
   }, [userId]);
 
-  // Show a laptop/desktop popup for a fresh notification (only when toggle is ON + permission granted)
   const showDesktop = (title: string, body: string) => {
     if (!desktopOnRef.current) return;
     if (!("Notification" in window)) return;
@@ -72,7 +70,7 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
 
   const { data: notifications = [], isSuccess } = useListNotifications(
     { userId },
-    { query: { refetchInterval: 15000, queryKey: getListNotificationsQueryKey({ userId }) } }
+    { query: { refetchInterval: 3000, queryKey: getListNotificationsQueryKey({ userId }) } }
   );
   const markRead = useMarkNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
@@ -86,23 +84,14 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
   const invalidate = () =>
     qc.invalidateQueries({ queryKey: getListNotificationsQueryKey({ userId }) });
 
-  // Pop a notification whenever a brand-new unread one arrives.
   useEffect(() => {
-    // Wait for the first real fetch to resolve before snapshotting the "already
-    // seen" ids. While the query is still loading, `notifications` is the empty
-    // default array — snapshotting that would leave the set empty, so when the
-    // real data arrived on the next render every existing notification would look
-    // brand-new and re-pop. That was the bug: old, already-seen notifications
-    // replayed their toast/popup on every login or refresh.
     if (!isSuccess) return;
     if (seenIds.current === null) {
-      // First successful load — remember existing ids, don't pop old ones.
       seenIds.current = new Set(notifications.map((n) => n.id));
       return;
     }
     const fresh = notifications.filter((n) => !seenIds.current!.has(n.id) && !n.read);
     if (fresh.length > 0) {
-      // Laptop/desktop screen popups (only when the user turned the toggle ON).
       fresh.forEach((n) =>
         showDesktop(
           n.type === "task_completed"
@@ -113,7 +102,6 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
           n.message
         )
       );
-      // Newly-assigned tasks → center popup queue (status + remark). Others → corner toast.
       const freshAssigns = fresh.filter((n) => n.type === "task_assigned" && n.taskId);
       if (freshAssigns.length > 0) {
         setAssignQueue((prev) => [
@@ -132,7 +120,6 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
     notifications.forEach((n) => seenIds.current!.add(n.id));
   }, [notifications, isSuccess]);
 
-  // Reset the form whenever a different popup reaches the front of the queue.
   useEffect(() => {
     setPopupStatus("pending");
     setPopupRemark("");
@@ -151,7 +138,6 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
       markRead.mutate({ id: notifId }, { onSuccess: invalidate });
       dequeue();
     };
-    // Update status first (this fires the giver's completion notification on "done").
     updateStatus.mutate(
       { id: taskId, data: { status: popupStatus } },
       {
@@ -175,7 +161,6 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
     dequeue();
   };
 
-  // Close dropdown on outside click
   useEffect(() => {
     function onClick(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setOpen(false);
@@ -204,7 +189,6 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
 
   return (
     <>
-      {/* Center popup for a newly-assigned task (status + remark) */}
       {currentPopup && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.45)" }}>
           <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
@@ -273,7 +257,6 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
         </div>
       )}
 
-      {/* Toast popups (top-right) */}
       <div className="fixed top-4 right-4 z-[60] flex flex-col gap-2 w-80 max-w-[90vw]">
         {toasts.map((t) => (
           <div
@@ -297,7 +280,6 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
         ))}
       </div>
 
-      {/* Bell */}
       <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => setOpen((o) => !o)}
