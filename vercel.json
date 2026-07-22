@@ -11,5 +11,9 @@
     { "source": "/api/push/subscribe", "destination": "/api/push/handler?route=subscribe" },
     { "source": "/api/push/unsubscribe", "destination": "/api/push/handler?route=unsubscribe" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "crons": [
+    { "path": "/api/reminders?window=morning", "schedule": "30 3 * * *" },
+    { "path": "/api/reminders?window=evening", "schedule": "0 12 * * *" }
   ]
 }
