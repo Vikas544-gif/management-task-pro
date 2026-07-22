@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { eq, and, ne } from "drizzle-orm";
+import { eq, and, ne, desc } from "drizzle-orm";
 import { Resend } from "resend";
 import { db } from "../lib/db.js";
 import {
@@ -176,7 +176,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === "GET") {
       const { userId } = req.query;
       const targetId = userId ? Number(userId) : me.id;
-      const rows = await db.select().from(notifications).where(eq(notifications.userId, targetId));
+      const rows = await db.select().from(notifications).where(eq(notifications.userId, targetId)).orderBy(desc(notifications.id));
       return res.status(200).json(rows);
     }
 
