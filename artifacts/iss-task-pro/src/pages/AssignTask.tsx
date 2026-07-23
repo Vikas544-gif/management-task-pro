@@ -58,19 +58,27 @@ export default function AssignTask({ currentUser }: AssignTaskProps) {
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: "" });
 
-      const norm = (s: string) => s.toString().trim().toLowerCase();
-      const findVal = (row: Record<string, any>, key: string) => {
-        const k = Object.keys(row).find((h) => norm(h) === key);
-        return k ? String(row[k]).trim() : "";
+      const norm = (s: string) => s.toString().replace(/[^a-z0-9]/gi, "").toLowerCase();
+      const findVal = (row: Record<string, any>, ...aliases: string[]) => {
+        const keys = Object.keys(row);
+        for (const alias of aliases) {
+          const k = keys.find((h) => norm(h) === norm(alias));
+          if (k && String(row[k]).trim()) return String(row[k]).trim();
+        }
+        return "";
       };
+      const detectedHeaders = rows.length > 0 ? Object.keys(rows[0]) : [];
 
       let ok = 0;
       const failed: string[] = [];
 
       for (const row of rows) {
-        const title = findVal(row, "title");
-        const assignToRaw = findVal(row, "assignto") || findVal(row, "assign to") || findVal(row, "username");
-        if (!title || !assignToRaw) { failed.push(`${title || "(no title)"} — missing Title or AssignTo`); continue; }
+        const title = findVal(row, "title", "task title", "titel", "taskname", "name");
+        const assignToRaw = findVal(row, "assignto", "assign to", "username", "assignee", "assigned to");
+        if (!title || !assignToRaw) {
+          failed.push(`${title || "(no title)"} — missing Title or AssignTo (columns found: ${detectedHeaders.join(", ") || "none"})`);
+          continue;
+        }
 
         const assignee = users.find(
           (u) => u.username?.toLowerCase() === assignToRaw.toLowerCase() || u.name?.toLowerCase() === assignToRaw.toLowerCase()
@@ -78,9 +86,9 @@ export default function AssignTask({ currentUser }: AssignTaskProps) {
         if (!assignee) { failed.push(`${title} — user "${assignToRaw}" not found`); continue; }
 
         const priority = findVal(row, "priority").toLowerCase() || "medium";
-        const type = (findVal(row, "type") || findVal(row, "frequency")).toLowerCase() || "daily";
+        const type = findVal(row, "type", "frequency", "tasktype").toLowerCase() || "daily";
         const category = findVal(row, "category") || null;
-        const dueDate = findVal(row, "duedate") || findVal(row, "due date") || null;
+        const dueDate = findVal(row, "duedate", "due date") || null;
         const description = findVal(row, "description") || null;
 
         try {
