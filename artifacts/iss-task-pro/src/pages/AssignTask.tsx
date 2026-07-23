@@ -78,7 +78,7 @@ export default function AssignTask({ currentUser }: AssignTaskProps) {
         if (!assignee) { failed.push(`${title} — user "${assignToRaw}" not found`); continue; }
 
         const priority = findVal(row, "priority").toLowerCase() || "medium";
-        const type = findVal(row, "type").toLowerCase() || "daily";
+        const type = (findVal(row, "type") || findVal(row, "frequency")).toLowerCase() || "daily";
         const category = findVal(row, "category") || null;
         const dueDate = findVal(row, "duedate") || findVal(row, "due date") || null;
         const description = findVal(row, "description") || null;
@@ -91,7 +91,7 @@ export default function AssignTask({ currentUser }: AssignTaskProps) {
               assignedBy: currentUser?.id ?? null,
               dueDate, dueTime: null,
               priority: ["low", "medium", "high"].includes(priority) ? priority : "medium",
-              type: ["daily", "weekly", "monthly", "oneTime"].includes(type) ? type : "daily",
+              type: ["daily", "weekly", "monthly", "onetime"].includes(type) ? (type === "onetime" ? "oneTime" : type) : "daily",
               category, department: assignee.department ?? null,
               remark: null, sendEmail: true,
             },

@@ -4,7 +4,7 @@ import { Resend } from "resend";
 import { db } from "../lib/db.js";
 import {
   attendance, categories, complianceCompanies, notifications,
-  users, emailSettings, tasks, pushSubscriptions,
+  users, emailSettings, tasks, pushSubscriptions, taskTransfers,
 } from "../lib/schema.js";
 import { requireUser } from "../lib/auth.js";
 
@@ -19,7 +19,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const me = requireUser(req, res);
   if (!me) return;
 
-  const resource = String(req.query.resource || "");
+  const resourceRaw = String(req.query.resource || "");
+  const resource = resourceRaw === "taskops" ? "tasks" : resourceRaw;
 
   // ── TASKS ────────────────────────────────────────────────────────────
   if (resource === "tasks") {
@@ -91,6 +92,64 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       return res.status(201).json(created);
+    }
+
+    if (req.method === "GET" && req.query.action === "transfers") {
+      const rows = await db.select().from(taskTransfers).orderBy(desc(taskTransfers.createdAt));
+      const allUsers = await db.select().from(users);
+      const allTasks = await db.select().from(tasks);
+      const userName = new Map(allUsers.map((u) => [u.id, u.name]));
+      const taskTitle = new Map(allTasks.map((t) => [t.id, t.title]));
+      const enriched = rows.map((r) => ({
+        id: r.id,
+        taskId: r.taskId,
+        taskTitle: taskTitle.get(r.taskId) ?? null,
+        fromUserId: r.fromUserId,
+        fromUserName: r.fromUserId != null ? userName.get(r.fromUserId) ?? null : null,
+        toUserId: r.toUserId,
+        toUserName: r.toUserId != null ? userName.get(r.toUserId) ?? null : null,
+        transferredBy: r.transferredBy,
+        transferredByName: r.transferredBy != null ? userName.get(r.transferredBy) ?? null : null,
+        createdAt: r.createdAt,
+      }));
+      return res.status(200).json(enriched);
+    }
+
+    if (req.method === "POST" && req.query.action === "generate-daily") {
+      const todayIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const myTasks = await db.select().from(tasks).where(eq(tasks.assignedTo, me.id));
+      const dailyTasks = myTasks.filter((t) => t.type === "daily");
+
+      // One template per distinct title — use whichever instance was created most recently.
+      const latestByTitle = new Map<string, typeof dailyTasks[number]>();
+      for (const t of dailyTasks) {
+        const prev = latestByTitle.get(t.title);
+        if (!prev || (t.id > prev.id)) latestByTitle.set(t.title, t);
+      }
+
+      const existingToday = new Set(
+        dailyTasks.filter((t) => t.dueDate === todayIST).map((t) => t.title)
+      );
+
+      let created = 0;
+      for (const [title, template] of latestByTitle) {
+        if (existingToday.has(title)) continue;
+        await db.insert(tasks).values({
+          title,
+          description: template.description,
+          assignedTo: me.id,
+          assignedBy: template.assignedBy,
+          priority: template.priority,
+          dueDate: todayIST,
+          type: "daily",
+          category: template.category,
+          department: template.department,
+          company: template.company,
+          sendEmailNotification: false,
+        });
+        created++;
+      }
+      return res.status(200).json({ success: true, created });
     }
   }
 

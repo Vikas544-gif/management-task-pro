@@ -10,6 +10,8 @@
     { "source": "/api/push/vapid-public-key", "destination": "/api/push?resource=push&route=vapid-public-key" },
     { "source": "/api/push/subscribe", "destination": "/api/push?resource=push&route=subscribe" },
     { "source": "/api/push/unsubscribe", "destination": "/api/push?resource=push&route=unsubscribe" },
+    { "source": "/api/tasks/transfers", "destination": "/api/taskops?action=transfers" },
+    { "source": "/api/tasks/generate-my-daily", "destination": "/api/taskops?action=generate-daily" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "crons": [
