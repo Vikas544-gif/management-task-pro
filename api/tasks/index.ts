@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { Resend } from "resend";
 import { db } from "../../lib/db.js";
 import { tasks, users, notifications } from "../../lib/schema.js";
@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!me) return;
 
   if (req.method === "GET") {
-    const allTasks = await db.select().from(tasks);
+    const allTasks = await db.select().from(tasks).orderBy(desc(tasks.id));
     const allUsers = await db.select().from(users);
     const nameOf = new Map(allUsers.map((u) => [u.id, u.name]));
     const enriched = allTasks.map((t) => ({
