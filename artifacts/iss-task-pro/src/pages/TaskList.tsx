@@ -939,6 +939,28 @@ export default function TaskList({ type = "all", currentUser }: TaskListProps) {
     }
   };
 
+  const bulkDelete = async () => {
+    if (bulkBusy) return;
+    const ids = sorted.filter((t) => selected.has(t.id)).map((t) => t.id);
+    if (ids.length === 0) return;
+    if (!confirm(`Delete ${ids.length} selected task${ids.length === 1 ? "" : "s"}? This can't be undone.`)) return;
+    setBulkBusy(true);
+    const results = await Promise.allSettled(ids.map((id) => deleteTask.mutateAsync({ id })));
+    setBulkBusy(false);
+    qc.invalidateQueries({ queryKey: getListTasksQueryKey() });
+    qc.invalidateQueries({ queryKey: getGetTaskSummaryQueryKey() });
+    const failedIds = ids.filter((_, i) => results[i].status === "rejected");
+    const ok = ids.length - failedIds.length;
+    if (ok > 0) {
+      setSaveFlash(`${ok} task${ok === 1 ? "" : "s"} deleted!`);
+      setTimeout(() => setSaveFlash(""), 2500);
+    }
+    setSelected(new Set(failedIds));
+    if (failedIds.length > 0) {
+      alert(`${failedIds.length} task${failedIds.length === 1 ? "" : "s"} could not be deleted. Please try again.`);
+    }
+  };
+
   const submitBulkRemark = async () => {
     if (bulkBusy) return;
     const remark = (bulkRemark ?? "").trim();
@@ -1376,6 +1398,10 @@ export default function TaskList({ type = "all", currentUser }: TaskListProps) {
             <button onClick={() => setBulkRemark("")} disabled={bulkBusy}
               className="px-3 py-1.5 bg-amber-500 text-white text-xs font-semibold rounded-lg hover:bg-amber-600 disabled:opacity-50 transition">
               💬 Add Remark
+            </button>
+            <button onClick={bulkDelete} disabled={bulkBusy}
+              className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700 disabled:opacity-50 transition">
+              {bulkBusy ? "Working…" : "🗑 Delete Selected"}
             </button>
             <button onClick={() => setSelected(new Set())} disabled={bulkBusy}
               className="ml-auto px-3 py-1.5 text-xs font-semibold text-muted-foreground border border-border rounded-lg hover:bg-muted disabled:opacity-50 transition">

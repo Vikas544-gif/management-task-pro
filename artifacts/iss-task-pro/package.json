@@ -77,5 +77,8 @@
     "vitest": "^4.1.9",
     "wouter": "^3.3.5",
     "zod": "catalog:"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
   }
 }

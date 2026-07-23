@@ -1,4 +1,5 @@
 import { useState } from "react";
+import * as XLSX from "xlsx";
 import { useListUsers, useListCategories, useCreateCategory, useDeleteCategory, useCreateTask, useUpdateUser, useListComplianceCompanies, useCreateComplianceCompany, useDeleteComplianceCompany, getListUsersQueryKey, getListTasksQueryKey, getGetTaskSummaryQueryKey, getListComplianceCompaniesQueryKey, getListCategoriesQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { isAllCentersViewer, resolveAssignableUsers } from "@/lib/utils";
@@ -37,6 +38,79 @@ export default function AssignTask({ currentUser }: AssignTaskProps) {
   const createTask = useCreateTask();
   const updateUser = useUpdateUser();
   const [showManage, setShowManage] = useState(false);
+
+  // ── Excel bulk import ──────────────────────────────────────────────────
+  // Expected columns (case-insensitive header match): Title, Description,
+  // AssignTo (username), Priority, Category, DueDate (YYYY-MM-DD), Type
+  // (daily/weekly/monthly/oneTime). Only Title + AssignTo are required.
+  const [importBusy, setImportBusy] = useState(false);
+  const [importResult, setImportResult] = useState<{ ok: number; failed: string[] } | null>(null);
+
+  const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+    setImportResult(null);
+    setImportBusy(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: "" });
+
+      const norm = (s: string) => s.toString().trim().toLowerCase();
+      const findVal = (row: Record<string, any>, key: string) => {
+        const k = Object.keys(row).find((h) => norm(h) === key);
+        return k ? String(row[k]).trim() : "";
+      };
+
+      let ok = 0;
+      const failed: string[] = [];
+
+      for (const row of rows) {
+        const title = findVal(row, "title");
+        const assignToRaw = findVal(row, "assignto") || findVal(row, "assign to") || findVal(row, "username");
+        if (!title || !assignToRaw) { failed.push(`${title || "(no title)"} — missing Title or AssignTo`); continue; }
+
+        const assignee = users.find(
+          (u) => u.username?.toLowerCase() === assignToRaw.toLowerCase() || u.name?.toLowerCase() === assignToRaw.toLowerCase()
+        );
+        if (!assignee) { failed.push(`${title} — user "${assignToRaw}" not found`); continue; }
+
+        const priority = findVal(row, "priority").toLowerCase() || "medium";
+        const type = findVal(row, "type").toLowerCase() || "daily";
+        const category = findVal(row, "category") || null;
+        const dueDate = findVal(row, "duedate") || findVal(row, "due date") || null;
+        const description = findVal(row, "description") || null;
+
+        try {
+          await createTask.mutateAsync({
+            data: {
+              title, description,
+              assignedTo: assignee.id,
+              assignedBy: currentUser?.id ?? null,
+              dueDate, dueTime: null,
+              priority: ["low", "medium", "high"].includes(priority) ? priority : "medium",
+              type: ["daily", "weekly", "monthly", "oneTime"].includes(type) ? type : "daily",
+              category, department: assignee.department ?? null,
+              remark: null, sendEmail: true,
+            },
+          });
+          ok++;
+        } catch {
+          failed.push(`${title} — server error`);
+        }
+      }
+
+      qc.invalidateQueries({ queryKey: getListTasksQueryKey() });
+      qc.invalidateQueries({ queryKey: getGetTaskSummaryQueryKey() });
+      setImportResult({ ok, failed });
+    } catch {
+      setImportResult({ ok: 0, failed: ["Could not read that file — make sure it's a valid .xlsx or .csv"] });
+    } finally {
+      setImportBusy(false);
+    }
+  };
 
   // Company picker — reuses the shared company master list. Selecting a company
   // appends " - {Company}" to the saved task title. Any user can add/remove
@@ -244,6 +318,35 @@ export default function AssignTask({ currentUser }: AssignTaskProps) {
           >
             {showManage ? "Done" : "Manage who appears"}
           </button>
+        )}
+      </div>
+
+      {/* Bulk import from Excel/CSV — Title + AssignTo columns required. */}
+      <div className="mb-5 bg-card rounded-xl border border-border shadow-sm p-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <div className="text-sm font-bold text-foreground">📥 Bulk import from Excel</div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Columns: <code>Title</code>, <code>AssignTo</code> (username) required. Optional: <code>Description</code>, <code>Priority</code>, <code>Category</code>, <code>DueDate</code>, <code>Type</code>.
+            </p>
+          </div>
+          <label className="shrink-0 px-3 py-2 text-xs font-semibold rounded-lg border border-border bg-card hover:bg-muted text-foreground cursor-pointer">
+            {importBusy ? "Importing…" : "Choose file"}
+            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" disabled={importBusy} onChange={handleExcelImport} />
+          </label>
+        </div>
+        {importResult && (
+          <div className="mt-3 text-xs">
+            <div className="text-green-700 font-semibold">{importResult.ok} task{importResult.ok === 1 ? "" : "s"} imported ✅</div>
+            {importResult.failed.length > 0 && (
+              <div className="mt-1 text-red-600">
+                {importResult.failed.length} skipped:
+                <ul className="list-disc list-inside">
+                  {importResult.failed.slice(0, 10).map((f, i) => <li key={i}>{f}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
