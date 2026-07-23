@@ -5,6 +5,14 @@ import { db } from "../../lib/db.js";
 import { users } from "../../lib/schema.js";
 import { requireUser } from "../../lib/auth.js";
 
+function parseBody(req: VercelRequest): Record<string, unknown> {
+  if (req.body == null) return {};
+  if (typeof req.body === "string") {
+    try { return JSON.parse(req.body); } catch { return {}; }
+  }
+  return req.body as Record<string, unknown>;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, PATCH, DELETE, OPTIONS");
@@ -25,7 +33,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "PATCH" || req.method === "PUT") {
-    const { name, email, role, department, center, reportsTo, active, password, centerPermissions } = req.body || {};
+    const { name, email, role, department, center, reportsTo, active, password, centerPermissions } = parseBody(req);
     const update: Record<string, unknown> = {};
     if (name !== undefined) update.name = name;
     if (email !== undefined) update.email = email;
@@ -36,11 +44,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (active !== undefined) update.active = active;
     if (centerPermissions !== undefined) update.centerPermissions = centerPermissions;
     if (password) {
-      update.password = await bcrypt.hash(password, 10);
-      update.passwordPlain = password;
+      update.password = await bcrypt.hash(String(password), 10);
+      update.passwordPlain = String(password);
     }
 
     if (Object.keys(update).length === 0) {
+      console.warn("PATCH /api/users/:id — no recognized fields in body:", JSON.stringify(parseBody(req)));
       const [current] = await db.select().from(users).where(eq(users.id, id)).limit(1);
       if (!current) return res.status(404).json({ message: "User not found" });
       const { password: _pw, passwordPlain: _pwp, ...safe } = current;
@@ -48,6 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const [updated] = await db.update(users).set(update).where(eq(users.id, id)).returning();
+    console.log("PATCH /api/users/:id — wrote:", JSON.stringify(update), "result:", JSON.stringify(updated));
     if (!updated) return res.status(404).json({ message: "User not found" });
     const { password: _pw, passwordPlain: _pwp, ...safe } = updated;
     return res.status(200).json(safe);
