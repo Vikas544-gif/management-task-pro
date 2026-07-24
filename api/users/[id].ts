@@ -33,9 +33,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "PATCH" || req.method === "PUT") {
-    const { name, email, role, department, center, reportsTo, active, password, centerPermissions } = parseBody(req);
+    const { name, username, email, role, department, center, reportsTo, active, password, centerPermissions } = parseBody(req);
     const update: Record<string, unknown> = {};
     if (name !== undefined) update.name = name;
+    if (username !== undefined) update.username = String(username).trim();
     if (email !== undefined) update.email = email;
     if (role !== undefined) update.role = role;
     if (department !== undefined) update.department = department;
@@ -56,7 +57,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(safe);
     }
 
-    const [updated] = await db.update(users).set(update).where(eq(users.id, id)).returning();
+    let updated;
+    try {
+      [updated] = await db.update(users).set(update).where(eq(users.id, id)).returning();
+    } catch (e: any) {
+      if (e?.code === "23505" || /unique/i.test(String(e?.message))) {
+        return res.status(409).json({ message: "That username is already taken" });
+      }
+      throw e;
+    }
     console.log("PATCH /api/users/:id — wrote:", JSON.stringify(update), "result:", JSON.stringify(updated));
     if (!updated) return res.status(404).json({ message: "User not found" });
     const { password: _pw, passwordPlain: _pwp, ...safe } = updated;
