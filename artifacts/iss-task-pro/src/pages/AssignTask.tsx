@@ -86,9 +86,27 @@ export default function AssignTask({ currentUser }: AssignTaskProps) {
         if (!assignee) { failed.push(`${title} — user "${assignToRaw}" not found`); continue; }
 
         const priority = findVal(row, "priority").toLowerCase() || "medium";
-        const type = findVal(row, "type", "frequency", "tasktype").toLowerCase() || "daily";
+        const freqRaw = findVal(row, "type", "frequency", "tasktype");
+        const freqLower = freqRaw.toLowerCase();
+        let type = "daily";
+        if (freqLower.includes("month")) type = "monthly";
+        else if (freqLower.includes("week")) type = "weekly";
+        else if (freqLower.includes("day")) type = "daily";
+        else if (["daily", "weekly", "monthly", "onetime"].includes(freqLower)) type = freqLower === "onetime" ? "oneTime" : freqLower;
+
         const category = findVal(row, "category") || null;
-        const dueDate = findVal(row, "duedate", "due date") || null;
+        let dueDate = findVal(row, "duedate", "due date") || null;
+
+        // Pull a day-of-month out of free-text like "Till 20th Of Month" so
+        // monthly tasks still get a real due date even without a DueDate column.
+        if (!dueDate) {
+          const dayMatch = freqRaw.match(/(\d{1,2})(st|nd|rd|th)?/i);
+          if (type === "monthly" && dayMatch) {
+            const day = Math.min(28, Math.max(1, parseInt(dayMatch[1], 10)));
+            const now = new Date();
+            dueDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+          }
+        }
         const description = findVal(row, "description") || null;
 
         try {
@@ -99,7 +117,7 @@ export default function AssignTask({ currentUser }: AssignTaskProps) {
               assignedBy: currentUser?.id ?? null,
               dueDate, dueTime: null,
               priority: ["low", "medium", "high"].includes(priority) ? priority : "medium",
-              type: ["daily", "weekly", "monthly", "onetime"].includes(type) ? (type === "onetime" ? "oneTime" : type) : "daily",
+              type,
               category, department: assignee.department ?? null,
               remark: null, sendEmail: true,
             },
