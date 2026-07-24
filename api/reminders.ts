@@ -59,7 +59,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const isTodayHoliday = holidaySet.has(today);
 
   const resend = new Resend(process.env.RESEND_API_KEY);
-  let sent = 0;
+
+  // Group every task that should be reminded about, per assignee, so each
+  // person gets ONE digest email instead of one email per task.
+  const byAssignee = new Map<number, { title: string; description: string | null; dueDate: string | null; priority: string; reason: string }[]>();
   let skippedNoEmail = 0;
 
   for (const t of allTasks) {
@@ -81,35 +84,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!shouldSend && window === "morning" && !isTodayHoliday) {
       if (t.type === "daily") {
         shouldSend = true;
-        reason = "daily reminder";
+        reason = "daily";
       } else if (t.type === "weekly" && t.dueDate && weekdayIST(today) === weekdayIST(t.dueDate)) {
         shouldSend = true;
-        reason = "weekly reminder";
+        reason = "weekly";
       } else if (t.type === "monthly" && t.dueDate && dayOfMonth(today) === dayOfMonth(t.dueDate)) {
         shouldSend = true;
-        reason = "monthly reminder";
+        reason = "monthly";
       }
     }
 
     if (!shouldSend) continue;
+    const list = byAssignee.get(t.assignedTo) ?? [];
+    list.push({ title: t.title, description: t.description, dueDate: t.dueDate, priority: t.priority, reason });
+    byAssignee.set(t.assignedTo, list);
+  }
 
+  let sent = 0;
+  for (const [userId, items] of byAssignee) {
+    const assignee = usersById.get(userId)!;
+    const rows = items
+      .map(
+        (i) => `<tr>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee">${i.title}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee;text-transform:capitalize">${i.reason}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee;text-transform:capitalize">${i.priority}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee">${i.dueDate ?? "—"}</td>
+        </tr>`
+      )
+      .join("");
     try {
       await resend.emails.send({
         from: FROM,
-        to: assignee.email,
-        subject: `Task reminder (${reason}): ${t.title}`,
+        to: assignee.email!,
+        subject: `Your ${items.length} task reminder${items.length === 1 ? "" : "s"} for today`,
         html: `<p>Hi ${assignee.name},</p>
-          <p>This is a reminder for your task: <strong>${t.title}</strong></p>
-          ${t.description ? `<p>${t.description}</p>` : ""}
-          ${t.dueDate ? `<p>Due: ${t.dueDate}</p>` : ""}
-          <p>Priority: ${t.priority}</p>
-          <p>Status: ${t.status}</p>`,
+          <p>Here ${items.length === 1 ? "is your task" : `are your ${items.length} tasks`} for today:</p>
+          <table style="border-collapse:collapse;width:100%;font-family:sans-serif;font-size:13px">
+            <thead><tr style="background:#f4f4f5;text-align:left">
+              <th style="padding:6px 10px">Task</th><th style="padding:6px 10px">Type</th>
+              <th style="padding:6px 10px">Priority</th><th style="padding:6px 10px">Due</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>`,
       });
       sent++;
     } catch (e) {
-      console.error("Reminder email failed for", assignee.email, e);
+      console.error("Digest reminder email failed for", assignee.email, e);
     }
   }
 
-  return res.status(200).json({ success: true, window, today, isTodayHoliday, sent, skippedNoEmail, checked: allTasks.length });
+  return res.status(200).json({ success: true, window, today, isTodayHoliday, sent, skippedNoEmail, checked: allTasks.length, recipientsWithTasks: byAssignee.size });
 }
