@@ -1,153 +1,177 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { eq } from "drizzle-orm";
+import { ne } from "drizzle-orm";
 import { Resend } from "resend";
-import { db } from "../../lib/db.js";
-import { tasks, taskTransfers, users, notifications } from "../../lib/schema.js";
-import { requireUser } from "../../lib/auth.js";
-import { sendPushToUser } from "../../lib/webPush.js";
+import { db } from "../lib/db.js";
+import { tasks, users, holidays } from "../lib/schema.js";
 
 const FROM = "Management Task Pro <noreply@infinityservicesindia.com>";
 
+function todayIST(): string {
+  const now = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  return now.toISOString().slice(0, 10);
+}
+
+function weekdayIST(dateStr: string): number {
+  return new Date(dateStr + "T00:00:00Z").getUTCDay();
+}
+
+function dayOfMonth(dateStr: string): number {
+  return Number(dateStr.slice(8, 10));
+}
+
+function addDays(dateStr: string, delta: number): string {
+  const d = new Date(dateStr + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+function shiftBackFromHoliday(dateStr: string, holidaySet: Set<string>): string {
+  let d = dateStr;
+  let guard = 0;
+  while (holidaySet.has(d) && guard < 14) {
+    d = addDays(d, -1);
+    guard++;
+  }
+  return d;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, PATCH, PUT, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") return res.status(204).end();
-
-  const me = requireUser(req, res);
-  if (!me) return;
-
-  const id = Number(req.query.id);
-  if (!id) return res.status(400).json({ message: "Invalid task id" });
-
-  if (req.method === "GET") {
-    const [task] = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
-    if (!task) return res.status(404).json({ message: "Task not found" });
-    return res.status(200).json(task);
+  const auth = req.headers.authorization;
+  if (process.env.CRON_SECRET && auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return res.status(401).json({ message: "Unauthorized" });
   }
 
-  if (req.method === "PATCH" || req.method === "PUT") {
-    const {
-      title, description, status, priority, dueDate, reminderTime,
-      type, category, department, company, remark, sendEmailNotification,
-      assignedTo,
-    } = req.body || {};
+  const window = String(req.query.window || "morning");
+  const today = todayIST();
 
-    const [existing] = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
-    if (!existing) return res.status(404).json({ message: "Task not found" });
+  const allHolidays = await db.select().from(holidays);
+  const holidaySet = new Set(allHolidays.map((h) => h.date));
+  const isTodayHoliday = holidaySet.has(today);
+  const isSunday = weekdayIST(today) === 0;
 
-    const update: Record<string, unknown> = { updatedAt: new Date() };
-    if (title !== undefined) update.title = title;
-    if (description !== undefined) update.description = description;
-    if (status !== undefined) update.status = status;
-    if (priority !== undefined) update.priority = priority;
-    if (dueDate !== undefined) update.dueDate = dueDate;
-    if (reminderTime !== undefined) update.reminderTime = reminderTime;
-    if (type !== undefined) update.type = type;
-    if (category !== undefined) update.category = category;
-    if (department !== undefined) update.department = department;
-    if (company !== undefined) update.company = company;
-    if (remark !== undefined) update.remark = remark;
-    if (sendEmailNotification !== undefined) update.sendEmailNotification = sendEmailNotification;
+  // ── Auto-generate today's daily-task instances for EVERY user ──────────
+  let generated = 0;
+  if (window === "morning" && !isTodayHoliday && !isSunday) {
+    const dailyTasks = await db.select().from(tasks).where(ne(tasks.type, "oneTime"));
+    const byUser = new Map<number, typeof dailyTasks>();
+    for (const t of dailyTasks) {
+      if (t.assignedTo == null || t.type !== "daily") continue;
+      const list = byUser.get(t.assignedTo) ?? [];
+      list.push(t);
+      byUser.set(t.assignedTo, list);
+    }
 
-    if (assignedTo !== undefined && assignedTo !== existing.assignedTo) {
-      update.assignedTo = assignedTo;
-      await db.insert(taskTransfers).values({
-        taskId: id,
-        fromUserId: existing.assignedTo,
-        toUserId: assignedTo,
-        transferredBy: me.id,
+    for (const [userId, userTasks] of byUser) {
+      const latestByTitle = new Map<string, (typeof userTasks)[number]>();
+      for (const t of userTasks) {
+        const prev = latestByTitle.get(t.title);
+        if (!prev || t.id > prev.id) latestByTitle.set(t.title, t);
+      }
+      const existingToday = new Set(userTasks.filter((t) => t.dueDate === today).map((t) => t.title));
+
+      for (const [title, template] of latestByTitle) {
+        if (existingToday.has(title)) continue;
+        await db.insert(tasks).values({
+          title,
+          description: template.description,
+          assignedTo: userId,
+          assignedBy: template.assignedBy,
+          priority: template.priority,
+          dueDate: today,
+          type: "daily",
+          category: template.category,
+          department: template.department,
+          company: template.company,
+          sendEmailNotification: false,
+        });
+        generated++;
+      }
+    }
+  }
+
+  if (!process.env.RESEND_API_KEY) {
+    return res.status(200).json({ success: false, message: "RESEND_API_KEY not set", generated, sent: 0 });
+  }
+
+  const [allTasks, allUsers] = await Promise.all([
+    db.select().from(tasks).where(ne(tasks.status, "done")),
+    db.select().from(users),
+  ]);
+
+  const usersById = new Map(allUsers.map((u) => [u.id, u]));
+  const resend = new Resend(process.env.RESEND_API_KEY);
+
+  const byAssignee = new Map<number, { title: string; description: string | null; dueDate: string | null; priority: string; reason: string }[]>();
+  let skippedNoEmail = 0;
+
+  for (const t of allTasks) {
+    if (t.assignedTo == null) continue;
+    const assignee = usersById.get(t.assignedTo);
+    if (!assignee?.email) { skippedNoEmail++; continue; }
+
+    let shouldSend = false;
+    let reason = "";
+
+    if (t.dueDate) {
+      const effectiveDue = shiftBackFromHoliday(t.dueDate, holidaySet);
+      if (effectiveDue === today) {
+        shouldSend = true;
+        reason = "due today";
+      }
+    }
+
+    if (!shouldSend && window === "morning" && !isTodayHoliday) {
+      if (t.type === "daily") {
+        shouldSend = true;
+        reason = "daily";
+      } else if (t.type === "weekly" && t.dueDate && weekdayIST(today) === weekdayIST(t.dueDate)) {
+        shouldSend = true;
+        reason = "weekly";
+      } else if (t.type === "monthly" && t.dueDate && dayOfMonth(today) === dayOfMonth(t.dueDate)) {
+        shouldSend = true;
+        reason = "monthly";
+      }
+    }
+
+    if (!shouldSend) continue;
+    const list = byAssignee.get(t.assignedTo) ?? [];
+    list.push({ title: t.title, description: t.description, dueDate: t.dueDate, priority: t.priority, reason });
+    byAssignee.set(t.assignedTo, list);
+  }
+
+  let sent = 0;
+  for (const [userId, items] of byAssignee) {
+    const assignee = usersById.get(userId)!;
+    const rows = items
+      .map(
+        (i) => `<tr>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee">${i.title}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee;text-transform:capitalize">${i.reason}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee;text-transform:capitalize">${i.priority}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee">${i.dueDate ?? "—"}</td>
+        </tr>`
+      )
+      .join("");
+    try {
+      await resend.emails.send({
+        from: FROM,
+        to: assignee.email!,
+        subject: `Your ${items.length} task reminder${items.length === 1 ? "" : "s"} for today`,
+        html: `<p>Hi ${assignee.name},</p>
+          <p>Here ${items.length === 1 ? "is your task" : `are your ${items.length} tasks`} for today:</p>
+          <table style="border-collapse:collapse;width:100%;font-family:sans-serif;font-size:13px">
+            <thead><tr style="background:#f4f4f5;text-align:left">
+              <th style="padding:6px 10px">Task</th><th style="padding:6px 10px">Type</th>
+              <th style="padding:6px 10px">Priority</th><th style="padding:6px 10px">Due</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>`,
       });
+      sent++;
+    } catch (e) {
+      console.error("Digest reminder email failed for", assignee.email, e);
     }
-
-    const [updated] = await db.update(tasks).set(update).where(eq(tasks.id, id)).returning();
-
-    if (assignedTo !== undefined && assignedTo !== existing.assignedTo && assignedTo) {
-      try {
-        await db.insert(notifications).values({
-          userId: assignedTo,
-          title: `New task assigned: ${updated?.title ?? "Task"}`,
-          message: `${updated?.title ?? "Task"} — assigned by ${me.name}`,
-          type: "task_assigned",
-          taskId: id,
-        });
-      } catch (e) {
-        console.error("Failed to create in-app notification (reassign):", e);
-      }
-
-      try {
-        await sendPushToUser(assignedTo, "Task assigned to you", `${updated?.title ?? "Task"} — assigned by ${me.name}`);
-      } catch (e) {
-        console.error("Push send failed (reassign):", e);
-      }
-    }
-
-    if (assignedTo !== undefined && assignedTo !== existing.assignedTo && assignedTo && process.env.RESEND_API_KEY) {
-      const [assignee] = await db.select().from(users).where(eq(users.id, assignedTo)).limit(1);
-      if (assignee?.email) {
-        try {
-          const resend = new Resend(process.env.RESEND_API_KEY);
-          await resend.emails.send({
-            from: FROM,
-            to: assignee.email,
-            subject: `Task assigned to you: ${updated?.title ?? "Task"}`,
-            html: `<p>Hi ${assignee.name},</p>
-              <p>A task has been assigned to you: <strong>${updated?.title ?? ""}</strong></p>
-              <p>Assigned by: ${me.name}</p>
-              <p>Priority: ${updated?.priority ?? "medium"}</p>`,
-          });
-        } catch (e) {
-          console.error("Task reassignment email failed:", e);
-        }
-      }
-    }
-
-    if (status === "done" && existing.status !== "done" && existing.assignedBy) {
-      try {
-        await db.insert(notifications).values({
-          userId: existing.assignedBy,
-          title: `Task completed: ${existing.title}`,
-          message: `${existing.title} — completed by ${me.name}`,
-          type: "task_completed",
-          taskId: id,
-        });
-      } catch (e) {
-        console.error("Failed to create in-app notification (completed):", e);
-      }
-
-      try {
-        await sendPushToUser(existing.assignedBy, "Task completed", `${existing.title} — completed by ${me.name}`);
-      } catch (e) {
-        console.error("Push send failed (completed):", e);
-      }
-    }
-
-    if (status === "done" && existing.status !== "done" && existing.assignedBy && process.env.RESEND_API_KEY) {
-      const [assigner] = await db.select().from(users).where(eq(users.id, existing.assignedBy)).limit(1);
-      if (assigner?.email) {
-        try {
-          const resend = new Resend(process.env.RESEND_API_KEY);
-          await resend.emails.send({
-            from: FROM,
-            to: assigner.email,
-            subject: `Task completed: ${existing.title}`,
-            html: `<p>Hi ${assigner.name},</p>
-              <p><strong>${existing.title}</strong> has been marked complete by ${me.name}.</p>`,
-          });
-        } catch (e) {
-          console.error("Task completion email failed:", e);
-        }
-      }
-    }
-
-    return res.status(200).json(updated);
   }
 
-  if (req.method === "DELETE") {
-    const [deleted] = await db.delete(tasks).where(eq(tasks.id, id)).returning();
-    if (!deleted) return res.status(404).json({ message: "Task not found" });
-    return res.status(200).json({ message: "Task deleted" });
-  }
-
-  return res.status(405).json({ message: "Method not allowed" });
+  return res.status(200).json({ success: true, window, today, isTodayHoliday, generated, sent, skippedNoEmail, checked: allTasks.length, recipientsWithTasks: byAssignee.size });
 }
