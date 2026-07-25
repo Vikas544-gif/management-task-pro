@@ -31,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === "POST") {
     const {
-      title, description, assignedTo, priority, dueDate, reminderTime,
+      title, description, assignedTo, priority, dueDate, dueTime, reminderTime,
       type, category, department, company, remark, sendEmail, sendEmailNotification,
     } = req.body || {};
     const shouldEmail = sendEmail !== undefined ? sendEmail : (sendEmailNotification ?? true);
@@ -46,7 +46,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         assignedBy: me.id,
         priority: priority || "medium",
         dueDate: dueDate || null,
-        reminderTime: reminderTime || null,
+        reminderTime: (dueTime ?? reminderTime) || null,
         type: type || "oneTime",
         category: category || null,
         department: department || null,

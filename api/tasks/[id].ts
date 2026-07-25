@@ -28,8 +28,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === "PATCH" || req.method === "PUT") {
     const {
-      title, description, status, priority, dueDate, reminderTime,
-      type, category, department, company, remark, sendEmailNotification,
+      title, description, status, priority, dueDate, dueTime, reminderTime,
+      type, category, department, company, remark, sendEmail, sendEmailNotification,
       assignedTo, // presence of this = a transfer/reassignment
     } = req.body || {};
 
@@ -42,13 +42,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (status !== undefined) update.status = status;
     if (priority !== undefined) update.priority = priority;
     if (dueDate !== undefined) update.dueDate = dueDate;
-    if (reminderTime !== undefined) update.reminderTime = reminderTime;
+    if (dueTime !== undefined) update.reminderTime = dueTime;
+    else if (reminderTime !== undefined) update.reminderTime = reminderTime;
     if (type !== undefined) update.type = type;
     if (category !== undefined) update.category = category;
     if (department !== undefined) update.department = department;
     if (company !== undefined) update.company = company;
     if (remark !== undefined) update.remark = remark;
-    if (sendEmailNotification !== undefined) update.sendEmailNotification = sendEmailNotification;
+    if (sendEmail !== undefined) update.sendEmailNotification = sendEmail;
+    else if (sendEmailNotification !== undefined) update.sendEmailNotification = sendEmailNotification;
 
     if (assignedTo !== undefined && assignedTo !== existing.assignedTo) {
       update.assignedTo = assignedTo;
