@@ -32,8 +32,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "POST") {
     const {
       title, description, assignedTo, priority, dueDate, reminderTime,
-      type, category, department, company, remark, sendEmailNotification,
+      type, category, department, company, remark, sendEmail, sendEmailNotification,
     } = req.body || {};
+    const shouldEmail = sendEmail !== undefined ? sendEmail : (sendEmailNotification ?? true);
     if (!title) return res.status(400).json({ message: "Task title is required" });
 
     const [created] = await db
@@ -51,7 +52,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         department: department || null,
         company: company || null,
         remark: remark || null,
-        sendEmailNotification: sendEmailNotification ?? true,
+        sendEmailNotification: shouldEmail,
       })
       .returning();
 
@@ -78,7 +79,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    if ((sendEmailNotification ?? true) && assignedTo && process.env.RESEND_API_KEY) {
+    if (shouldEmail && assignedTo && process.env.RESEND_API_KEY) {
       const [assignee] = await db.select().from(users).where(eq(users.id, assignedTo)).limit(1);
       if (assignee?.email) {
         try {

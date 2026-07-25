@@ -119,7 +119,7 @@ export default function AssignTask({ currentUser }: AssignTaskProps) {
               priority: ["low", "medium", "high"].includes(priority) ? priority : "medium",
               type,
               category, department: assignee.department ?? null,
-              remark: null, sendEmail: true,
+              remark: null, sendEmail: false,
             },
           });
           ok++;
