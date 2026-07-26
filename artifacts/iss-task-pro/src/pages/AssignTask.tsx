@@ -516,7 +516,7 @@ export default function AssignTask({ currentUser }: AssignTaskProps) {
             {/* Due Date */}
             <div>
               <label className="block text-xs font-bold text-muted-foreground mb-1.5">Due Date</label>
-              <input type="date" data-testid="input-due-date" value={form.dueDate} onChange={(e) => set("dueDate", e.target.value)}
+              <input type="date" data-testid="input-due-date" autoComplete="off" value={form.dueDate} onChange={(e) => set("dueDate", e.target.value)}
                 className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
             </div>
             {/* Due Time — popup reminder is shown at this time on the due date */}
