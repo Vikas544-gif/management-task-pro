@@ -16,6 +16,8 @@
   ],
   "crons": [
     { "path": "/api/reminders?window=morning", "schedule": "30 3 * * *" },
-    { "path": "/api/reminders?window=evening", "schedule": "0 12 * * *" }
+    { "path": "/api/reminders?window=evening", "schedule": "0 12 * * *" },
+    { "path": "/api/reminders?window=lunch-order", "schedule": "30 6 * * *" },
+    { "path": "/api/reminders?window=lunch-eat", "schedule": "30 7 * * *" }
   ]
 }

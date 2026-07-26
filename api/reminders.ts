@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { ne } from "drizzle-orm";
+import { ne, eq, and, gte } from "drizzle-orm";
 import { Resend } from "resend";
 import { db } from "../lib/db.js";
-import { tasks, users, holidays } from "../lib/schema.js";
+import { tasks, users, holidays, notifications } from "../lib/schema.js";
 
 const FROM = "Management Task Pro <noreply@infinityservicesindia.com>";
 
@@ -43,6 +43,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const window = String(req.query.window || "morning");
   const today = todayIST();
+
+  // ── Lunch reminders (bell only, no email — see design note) ────────────
+  if (window === "lunch-order" || window === "lunch-eat") {
+    const startOfToday = new Date(`${today}T00:00:00+05:30`);
+    const kind = window === "lunch-order" ? "lunch_order" : "lunch_eat";
+    const already = await db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.type, kind), gte(notifications.createdAt, startOfToday)))
+      .limit(1);
+    if (already.length > 0) {
+      return res.status(200).json({ success: true, window, alreadySent: true, sent: 0 });
+    }
+
+    const recipients = await db.select().from(users).where(eq(users.active, true));
+    const title = window === "lunch-order" ? "🍱 Order your lunch" : "🍽️ Lunch break — enjoy your meal!";
+    let sent = 0;
+    for (const u of recipients) {
+      if (!u.username) continue;
+      await db.insert(notifications).values({ userId: u.id, title, type: kind });
+      sent++;
+    }
+    return res.status(200).json({ success: true, window, sent });
+  }
 
   const allHolidays = await db.select().from(holidays);
   const holidaySet = new Set(allHolidays.map((h) => h.date));
