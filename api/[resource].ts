@@ -4,7 +4,7 @@ import { Resend } from "resend";
 import { db } from "../lib/db.js";
 import {
   attendance, categories, complianceCompanies, notifications,
-  users, emailSettings, tasks, pushSubscriptions, taskTransfers,
+  users, emailSettings, tasks, pushSubscriptions, taskTransfers, holidays,
 } from "../lib/schema.js";
 import { requireUser } from "../lib/auth.js";
 
@@ -180,6 +180,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  // ── HOLIDAYS ──────────────────────────────────────────────────────
+  if (resource === "holidays") {
+    if (req.method === "GET") {
+      const all = await db.select().from(holidays);
+      return res.status(200).json(all);
+    }
+
+    if (req.method === "POST") {
+      const { date, name, day, type } = req.body || {};
+      if (!date || !name || !day) {
+        return res.status(400).json({ message: "date, name and day are required" });
+      }
+      const [created] = await db
+        .insert(holidays)
+        .values({ date, name, day, type: type || "full" })
+        .returning();
+      return res.status(201).json(created);
+    }
+
+    if (req.method === "DELETE") {
+      const id = Number(req.query.id);
+      if (!id) return res.status(400).json({ message: "Invalid holiday id" });
+      const [deleted] = await db.delete(holidays).where(eq(holidays.id, id)).returning();
+      if (!deleted) return res.status(404).json({ message: "Holiday not found" });
+      return res.status(200).json({ message: "Holiday deleted" });
+    }
+  }
+
   // ── CATEGORIES ──────────────────────────────────────────────────────
   if (resource === "categories") {
     if (req.method === "GET") {
@@ -249,6 +277,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .values({ userId, title, message: message || null })
         .returning();
       return res.status(201).json(created);
+    }
+
+    if (req.method === "PATCH" && req.query.id) {
+      const id = Number(req.query.id);
+      const [updated] = await db.update(notifications).set({ read: true }).where(eq(notifications.id, id)).returning();
+      if (!updated) return res.status(404).json({ message: "Notification not found" });
+      return res.status(200).json(updated);
+    }
+
+    if (req.method === "DELETE" && req.query.id) {
+      const id = Number(req.query.id);
+      const [deleted] = await db.delete(notifications).where(eq(notifications.id, id)).returning();
+      if (!deleted) return res.status(404).json({ message: "Notification not found" });
+      return res.status(200).json({ success: true });
     }
 
     if (req.method === "PATCH") {

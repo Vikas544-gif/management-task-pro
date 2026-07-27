@@ -12,6 +12,9 @@
     { "source": "/api/push/unsubscribe", "destination": "/api/push?resource=push&route=unsubscribe" },
     { "source": "/api/tasks/transfers", "destination": "/api/taskops?action=transfers" },
     { "source": "/api/tasks/generate-my-daily", "destination": "/api/taskops?action=generate-daily" },
+    { "source": "/api/holidays/:id", "destination": "/api/holidays?id=:id" },
+    { "source": "/api/notifications/:id/read", "destination": "/api/notifications?resource=notifications&id=:id" },
+    { "source": "/api/notifications/:id", "destination": "/api/notifications?resource=notifications&id=:id" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "crons": [
