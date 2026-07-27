@@ -3,6 +3,7 @@ import { ne, eq, and, gte } from "drizzle-orm";
 import { Resend } from "resend";
 import { db } from "../lib/db.js";
 import { tasks, users, holidays, notifications } from "../lib/schema.js";
+import { sendPushToUser } from "../lib/webPush.js";
 
 const FROM = "Management Task Pro <noreply@infinityservicesindia.com>";
 
@@ -63,6 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     for (const u of recipients) {
       if (!u.username) continue;
       await db.insert(notifications).values({ userId: u.id, title, type: kind });
+      void sendPushToUser(u.id, title, "");
       sent++;
     }
     return res.status(200).json({ success: true, window, sent });

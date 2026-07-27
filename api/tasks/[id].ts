@@ -92,7 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       void sendPushToUser(existing.assignedBy, "Task completed", `${existing.title} — completed by ${me.name}`);
     }
 
-    if (status === "done" && existing.status !== "done" && existing.assignedBy && process.env.RESEND_API_KEY) {
+    if (status === "done" && existing.status !== "done" && existing.assignedBy && existing.type === "oneTime" && process.env.RESEND_API_KEY) {
       const [assigner] = await db.select().from(users).where(eq(users.id, existing.assignedBy)).limit(1);
       if (assigner?.email) {
         try {
