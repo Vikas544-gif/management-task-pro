@@ -63,7 +63,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let sent = 0;
     for (const u of recipients) {
       if (!u.username) continue;
-      await db.insert(notifications).values({ userId: u.id, title, type: kind });
+      await db.insert(notifications).values({
+        userId: u.id,
+        title: window === "lunch-order" ? "Lunch reminder" : "Lunch break",
+        message: title,
+        type: kind,
+      });
       void sendPushToUser(u.id, title, "");
       sent++;
     }
