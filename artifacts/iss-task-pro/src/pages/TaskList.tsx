@@ -1139,7 +1139,7 @@ export default function TaskList({ type = "all", currentUser }: TaskListProps) {
                             <td className="px-4 py-2.5">
                               <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${statusBadge(t.status)}`}>{statusLabel(t.status)}</span>
                             </td>
-                            <td className={cn("px-4 py-2.5 text-xs", isOverdue(t.dueDate, t.status) ? "text-red-600 dark:text-red-400 font-bold" : "text-muted-foreground")}>{t.dueDate || "—"}</td>
+                            <td className={cn("px-4 py-2.5 text-xs", isOverdue(t.dueDate, t.status) ? "text-red-600 dark:text-red-400 font-bold" : "text-muted-foreground")}>{t.type === "oneTime" ? (t.dueDate || "—") : "—"}</td>
                           </tr>
                         );
                       })}
@@ -1479,7 +1479,7 @@ export default function TaskList({ type = "all", currentUser }: TaskListProps) {
                   </td>
                   <td className="px-4 py-3 capitalize text-muted-foreground text-xs">{String(task.type).replace("_", " ")}</td>
                   <td className={cn("px-4 py-3 text-xs", isOverdue(task.dueDate, task.status) ? "text-red-600 dark:text-red-400 font-bold" : "text-muted-foreground")}>
-                    {formatDate(task.dueDate)}{task.dueTime && ` ⏰ ${task.dueTime}`}
+                    {task.type === "oneTime" ? (<>{formatDate(task.dueDate)}{task.dueTime && ` ⏰ ${task.dueTime}`}</>) : "—"}
                   </td>
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <select value={task.status}

@@ -501,7 +501,7 @@ export default function MyTasks({ currentUser }: MyTasksProps) {
                     <div className="flex flex-wrap gap-1.5 mt-2">
                       {task.category && <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs">{task.category}</span>}
                       <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded-full text-xs capitalize">{String(task.type).replace("_", " ")}</span>
-                      {task.dueDate && (
+                      {task.dueDate && task.type === "oneTime" && (
                         <span className={cn("px-2 py-0.5 rounded-full text-xs",
                           isOverdue(task.dueDate, task.status) ? "bg-red-100 text-red-700 font-bold dark:bg-red-900/40 dark:text-red-300" : "bg-background border border-border text-muted-foreground")}>
                           📅 {formatDate(task.dueDate)} {task.dueTime && `⏰ ${task.dueTime}`} {isOverdue(task.dueDate, task.status) && "— OVERDUE!"}

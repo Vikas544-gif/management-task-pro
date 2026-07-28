@@ -534,7 +534,10 @@ export default function AssignTask({ currentUser }: AssignTaskProps) {
             {/* Task Type */}
             <div>
               <label className="block text-xs font-bold text-muted-foreground mb-1.5">Task Type</label>
-              <select data-testid="select-task-type" value={form.type} onChange={(e) => set("type", e.target.value)}
+              <select data-testid="select-task-type" value={form.type} onChange={(e) => {
+                const newType = e.target.value;
+                setForm((f) => ({ ...f, type: newType, dueDate: newType === "oneTime" ? f.dueDate : "" }));
+              }}
                 className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring">
                 <option value="daily">Daily</option>
                 <option value="weekly">Weekly</option>
