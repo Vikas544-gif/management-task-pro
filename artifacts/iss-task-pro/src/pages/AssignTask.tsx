@@ -89,13 +89,24 @@ export default function AssignTask({ currentUser }: AssignTaskProps) {
         const freqRaw = findVal(row, "type", "frequency", "tasktype");
         const freqLower = freqRaw.toLowerCase();
         let type = "daily";
-        if (freqLower.includes("month")) type = "monthly";
+        if (freqLower.includes("quarter")) type = "oneTime"; // specific one-off date, due date stays visible
+        else if (freqLower.includes("month")) type = "monthly";
         else if (freqLower.includes("week")) type = "weekly";
         else if (freqLower.includes("day")) type = "daily";
-        else if (["daily", "weekly", "monthly", "onetime"].includes(freqLower)) type = freqLower === "onetime" ? "oneTime" : freqLower;
+        else if (["daily", "weekly", "monthly", "onetime", "one-time", "one time"].includes(freqLower)) {
+          type = freqLower === "daily" || freqLower === "weekly" || freqLower === "monthly" ? freqLower : "oneTime";
+        }
 
         const category = findVal(row, "category") || null;
         let dueDate = findVal(row, "duedate", "due date") || null;
+
+        // Convert DD-MM-YYYY (and DD/MM/YYYY) into the YYYY-MM-DD the backend expects.
+        if (dueDate) {
+          const dmy = dueDate.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+          if (dmy) {
+            dueDate = `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
+          }
+        }
 
         // Pull a day-of-month out of free-text like "Till 20th Of Month" so
         // monthly tasks still get a real due date even without a DueDate column.
@@ -114,7 +125,7 @@ export default function AssignTask({ currentUser }: AssignTaskProps) {
             data: {
               title, description,
               assignedTo: assignee.id,
-              assignedBy: currentUser?.id ?? null,
+              assignedBy: assignee.id, // self-owned — shows as assigned by the same person
               dueDate, dueTime: null,
               priority: ["low", "medium", "high"].includes(priority) ? priority : "medium",
               type,
