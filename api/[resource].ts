@@ -156,14 +156,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // ── ATTENDANCE ──────────────────────────────────────────────────────
   if (resource === "attendance") {
     if (req.method === "GET") {
-      const { userId } = req.query;
-      const rows = userId
-        ? await db.select().from(attendance).where(eq(attendance.userId, Number(userId)))
+      const { date, center } = req.query;
+      const rows = date
+        ? await db.select().from(attendance).where(eq(attendance.date, String(date)))
         : await db.select().from(attendance);
 
       const allUsers = await db.select().from(users);
-      const nameOf = new Map(allUsers.map((u) => [u.id, u.name]));
-      const enriched = rows.map((r) => ({ ...r, userName: nameOf.get(r.userId) ?? null }));
+      const userById = new Map(allUsers.map((u) => [u.id, u]));
+      let enriched = rows.map((r) => ({ ...r, userName: userById.get(r.userId)?.name ?? null }));
+      if (center) {
+        enriched = enriched.filter((r) => userById.get(r.userId)?.center === String(center));
+      }
       return res.status(200).json(enriched);
     }
 
