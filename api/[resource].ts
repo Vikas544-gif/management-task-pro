@@ -4,7 +4,7 @@ import { Resend } from "resend";
 import { db } from "../lib/db.js";
 import {
   attendance, categories, complianceCompanies, notifications,
-  users, emailSettings, tasks, pushSubscriptions, taskTransfers, holidays,
+  users, emailSettings, tasks, taskTransfers, holidays,
 } from "../lib/schema.js";
 import { requireUser } from "../lib/auth.js";
 
@@ -22,7 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const resourceRaw = String(req.query.resource || "");
   const resource = resourceRaw === "taskops" ? "tasks" : resourceRaw;
 
-  // ── TASKS ────────────────────────────────────────────────────────────
+  // TASKS
   if (resource === "tasks") {
     if (req.method === "GET") {
       const allTasks = await db.select().from(tasks);
@@ -62,11 +62,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .returning();
 
       if (assignedTo) {
-        await db.insert(notifications).values({
-          userId: assignedTo,
-          title: `New task assigned: ${title}`,
-          message: `Assigned by ${me.name}${dueDate ? ` — due ${dueDate}` : ""}`,
-        });
+        try {
+          await db.insert(notifications).values({
+            userId: assignedTo,
+            title: `New task assigned: ${title}`,
+            message: `Assigned by ${me.name}${dueDate ? ` — due ${dueDate}` : ""}`,
+            type: "task_assigned",
+            taskId: created.id,
+          });
+        } catch (e) {
+          console.error("Failed to create in-app notification:", e);
+        }
       }
 
       if ((sendEmailNotification ?? true) && assignedTo && process.env.RESEND_API_KEY) {
@@ -120,7 +126,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const myTasks = await db.select().from(tasks).where(eq(tasks.assignedTo, me.id));
       const dailyTasks = myTasks.filter((t) => t.type === "daily");
 
-      // One template per distinct title — use whichever instance was created most recently.
       const latestByTitle = new Map<string, typeof dailyTasks[number]>();
       for (const t of dailyTasks) {
         const prev = latestByTitle.get(t.title);
@@ -153,7 +158,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // ── ATTENDANCE ──────────────────────────────────────────────────────
+  // ATTENDANCE
   if (resource === "attendance") {
     if (req.method === "GET") {
       const { date, center } = req.query;
@@ -183,7 +188,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // ── HOLIDAYS ──────────────────────────────────────────────────────
+  // HOLIDAYS
   if (resource === "holidays") {
     if (req.method === "GET") {
       const all = await db.select().from(holidays);
@@ -211,7 +216,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // ── CATEGORIES ──────────────────────────────────────────────────────
+  // CATEGORIES
   if (resource === "categories") {
     if (req.method === "GET") {
       const all = await db.select().from(categories);
@@ -226,7 +231,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // ── COMPLIANCE COMPANIES ────────────────────────────────────────────
+  // COMPLIANCE COMPANIES
   if (resource === "complianceCompanies") {
     if (req.method === "GET") {
       const all = await db.select().from(complianceCompanies);
@@ -249,7 +254,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // ── NOTIFICATIONS ───────────────────────────────────────────────────
+  // NOTIFICATIONS
   if (resource === "notifications") {
     const action = String(req.query.action || "");
 
@@ -308,7 +313,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // ── EMAIL ───────────────────────────────────────────────────────────
+  // EMAIL
   if (resource === "email") {
     const route = String(req.query.route || "");
 
@@ -428,41 +433,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         eligible: recipients.length,
         skippedNoEmail,
       });
-    }
-
-    return res.status(404).json({ message: "Not found" });
-  }
-
-  // ── PUSH (browser background notifications) ─────────────────────────────
-  if (resource === "push") {
-    const route = String(req.query.route || "");
-
-    if (route === "vapid-public-key" && req.method === "GET") {
-      return res.status(200).json({ publicKey: process.env.VAPID_PUBLIC_KEY || "" });
-    }
-
-    if (route === "subscribe" && req.method === "POST") {
-      const { endpoint, keys } = req.body || {};
-      if (!endpoint || !keys?.p256dh || !keys?.auth) return res.status(400).json({ success: false });
-      try {
-        await db
-          .insert(pushSubscriptions)
-          .values({ userId: me.id, endpoint, p256dh: keys.p256dh, auth: keys.auth })
-          .onConflictDoUpdate({
-            target: pushSubscriptions.endpoint,
-            set: { userId: me.id, p256dh: keys.p256dh, auth: keys.auth },
-          });
-        return res.status(200).json({ success: true });
-      } catch (e) {
-        console.error("Push subscribe failed:", e);
-        return res.status(200).json({ success: false });
-      }
-    }
-
-    if (route === "unsubscribe" && req.method === "POST") {
-      const { endpoint } = req.body || {};
-      if (endpoint) await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
-      return res.status(200).json({ success: true });
     }
 
     return res.status(404).json({ message: "Not found" });
