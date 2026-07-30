@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { eq } from "drizzle-orm";
 import { Resend } from "resend";
 import { db } from "../../lib/db.js";
-import { tasks, taskTransfers, users } from "../../lib/schema.js";
+import { tasks, taskTransfers, users, notifications } from "../../lib/schema.js";
 import { requireUser } from "../../lib/auth.js";
 import { sendPushToUser } from "../../lib/webPush.js";
 
@@ -30,7 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const {
       title, description, status, priority, dueDate, dueTime, reminderTime,
       type, category, department, company, remark, sendEmail, sendEmailNotification,
-      assignedTo, // presence of this = a transfer/reassignment
+      assignedTo,
     } = req.body || {};
 
     const [existing] = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
@@ -65,7 +65,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const [updated] = await db.update(tasks).set(update).where(eq(tasks.id, id)).returning();
 
     if (assignedTo !== undefined && assignedTo !== existing.assignedTo && assignedTo) {
-      void sendPushToUser(assignedTo, "Task assigned to you", `${updated?.title ?? "Task"} — assigned by ${me.name}`);
+      try {
+        await db.insert(notifications).values({
+          userId: assignedTo,
+          title: `New task assigned: ${updated?.title ?? "Task"}`,
+          message: `${updated?.title ?? "Task"} — assigned by ${me.name}`,
+          type: "task_assigned",
+          taskId: id,
+        });
+      } catch (e) {
+        console.error("Failed to create in-app notification (reassign):", e);
+      }
+
+      try {
+        await sendPushToUser(assignedTo, "Task assigned to you", `${updated?.title ?? "Task"} — assigned by ${me.name}`);
+      } catch (e) {
+        console.error("Push send failed (reassign):", e);
+      }
     }
 
     if (assignedTo !== undefined && assignedTo !== existing.assignedTo && assignedTo && process.env.RESEND_API_KEY) {
@@ -89,7 +105,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (status === "done" && existing.status !== "done" && existing.assignedBy) {
-      void sendPushToUser(existing.assignedBy, "Task completed", `${existing.title} — completed by ${me.name}`);
+      try {
+        await db.insert(notifications).values({
+          userId: existing.assignedBy,
+          title: `Task completed: ${existing.title}`,
+          message: `${existing.title} — completed by ${me.name}`,
+          type: "task_completed",
+          taskId: id,
+        });
+      } catch (e) {
+        console.error("Failed to create in-app notification (completed):", e);
+      }
+
+      try {
+        await sendPushToUser(existing.assignedBy, "Task completed", `${existing.title} — completed by ${me.name}`);
+      } catch (e) {
+        console.error("Push send failed (completed):", e);
+      }
     }
 
     if (status === "done" && existing.status !== "done" && existing.assignedBy && existing.type === "oneTime" && process.env.RESEND_API_KEY) {
