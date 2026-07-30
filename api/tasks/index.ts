@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { eq, desc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Resend } from "resend";
 import { db } from "../../lib/db.js";
-import { tasks, users, notifications } from "../../lib/schema.js";
+import { tasks, taskTransfers, users, notifications } from "../../lib/schema.js";
 import { requireUser } from "../../lib/auth.js";
 import { sendPushToUser } from "../../lib/webPush.js";
 
@@ -10,76 +10,81 @@ const FROM = "Management Task Pro <noreply@infinityservicesindia.com>";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, PATCH, PUT, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(204).end();
 
   const me = requireUser(req, res);
   if (!me) return;
 
+  const id = Number(req.query.id);
+  if (!id) return res.status(400).json({ message: "Invalid task id" });
+
   if (req.method === "GET") {
-    const allTasks = await db.select().from(tasks).orderBy(desc(tasks.id));
-    const allUsers = await db.select().from(users);
-    const nameOf = new Map(allUsers.map((u) => [u.id, u.name]));
-    const enriched = allTasks.map((t) => ({
-      ...t,
-      assignedByName: t.assignedBy != null ? nameOf.get(t.assignedBy) ?? null : null,
-      assignedToName: t.assignedTo != null ? nameOf.get(t.assignedTo) ?? null : null,
-    }));
-    return res.status(200).json(enriched);
+    const [task] = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
+    if (!task) return res.status(404).json({ message: "Task not found" });
+    return res.status(200).json(task);
   }
 
-  if (req.method === "POST") {
+  if (req.method === "PATCH" || req.method === "PUT") {
     const {
-      title, description, assignedTo, priority, dueDate, dueTime, reminderTime,
+      title, description, status, priority, dueDate, dueTime, reminderTime,
       type, category, department, company, remark, sendEmail, sendEmailNotification,
+      assignedTo,
     } = req.body || {};
-    const shouldEmail = sendEmail !== undefined ? sendEmail : (sendEmailNotification ?? true);
-    if (!title) return res.status(400).json({ message: "Task title is required" });
 
-    const [created] = await db
-      .insert(tasks)
-      .values({
-        title,
-        description: description || null,
-        assignedTo: assignedTo ?? null,
-        assignedBy: me.id,
-        priority: priority || "medium",
-        dueDate: dueDate || null,
-        reminderTime: (dueTime ?? reminderTime) || null,
-        type: type || "oneTime",
-        category: category || null,
-        department: department || null,
-        company: company || null,
-        remark: remark || null,
-        sendEmailNotification: shouldEmail,
-      })
-      .returning();
+    const [existing] = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
+    if (!existing) return res.status(404).json({ message: "Task not found" });
 
-    if (assignedTo) {
-      // In-app bell notification (notifications table)
+    const update: Record<string, unknown> = { updatedAt: new Date() };
+    if (title !== undefined) update.title = title;
+    if (description !== undefined) update.description = description;
+    if (status !== undefined) update.status = status;
+    if (priority !== undefined) update.priority = priority;
+    if (dueDate !== undefined) update.dueDate = dueDate;
+    if (dueTime !== undefined) update.reminderTime = dueTime;
+    else if (reminderTime !== undefined) update.reminderTime = reminderTime;
+    if (type !== undefined) update.type = type;
+    if (category !== undefined) update.category = category;
+    if (department !== undefined) update.department = department;
+    if (company !== undefined) update.company = company;
+    if (remark !== undefined) update.remark = remark;
+    if (sendEmail !== undefined) update.sendEmailNotification = sendEmail;
+    else if (sendEmailNotification !== undefined) update.sendEmailNotification = sendEmailNotification;
+
+    if (assignedTo !== undefined && assignedTo !== existing.assignedTo) {
+      update.assignedTo = assignedTo;
+      await db.insert(taskTransfers).values({
+        taskId: id,
+        fromUserId: existing.assignedTo,
+        toUserId: assignedTo,
+        transferredBy: me.id,
+      });
+    }
+
+    const [updated] = await db.update(tasks).set(update).where(eq(tasks.id, id)).returning();
+
+    if (assignedTo !== undefined && assignedTo !== existing.assignedTo && assignedTo) {
       try {
         await db.insert(notifications).values({
           userId: assignedTo,
-          title: `New task assigned: ${title}`,
-          message: `${title} — assigned by ${me.name}${dueDate ? ` (due ${dueDate})` : ""}`,
+          title: `New task assigned: ${updated?.title ?? "Task"}`,
+          message: `${updated?.title ?? "Task"} — assigned by ${me.name}`,
           type: "task_assigned",
-          taskId: created.id,
+          taskId: id,
         });
       } catch (e) {
-        console.error("Failed to create in-app notification:", e);
+        console.error("Failed to create in-app notification (reassign):", e);
       }
 
-      // Browser push notification (awaited so Vercel does not freeze the
-      // function before the network call to the push service completes)
       try {
-        await sendPushToUser(assignedTo, "New task assigned", `${title} — assigned by ${me.name}`);
+        await sendPushToUser(assignedTo, "Task assigned to you", `${updated?.title ?? "Task"} — assigned by ${me.name}`);
       } catch (e) {
-        console.error("Push send failed:", e);
+        console.error("Push send failed (reassign):", e);
       }
     }
 
-    if (shouldEmail && assignedTo && process.env.RESEND_API_KEY) {
+    if (assignedTo !== undefined && assignedTo !== existing.assignedTo && assignedTo && process.env.RESEND_API_KEY) {
       const [assignee] = await db.select().from(users).where(eq(users.id, assignedTo)).limit(1);
       if (assignee?.email) {
         try {
@@ -87,21 +92,63 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await resend.emails.send({
             from: FROM,
             to: assignee.email,
-            subject: `New task assigned: ${title}`,
+            subject: `Task assigned to you: ${updated?.title ?? "Task"}`,
             html: `<p>Hi ${assignee.name},</p>
-              <p>You've been assigned a new task: <strong>${title}</strong></p>
+              <p>A task has been assigned to you: <strong>${updated?.title ?? ""}</strong></p>
               <p>Assigned by: ${me.name}</p>
-              ${description ? `<p>${description}</p>` : ""}
-              ${dueDate ? `<p>Due: ${dueDate}</p>` : ""}
-              <p>Priority: ${priority || "medium"}</p>`,
+              <p>Priority: ${updated?.priority ?? "medium"}</p>`,
           });
         } catch (e) {
-          console.error("Task assignment email failed:", e);
+          console.error("Task reassignment email failed:", e);
         }
       }
     }
 
-    return res.status(201).json(created);
+    if (status === "done" && existing.status !== "done" && existing.assignedBy) {
+      try {
+        await db.insert(notifications).values({
+          userId: existing.assignedBy,
+          title: `Task completed: ${existing.title}`,
+          message: `${existing.title} — completed by ${me.name}`,
+          type: "task_completed",
+          taskId: id,
+        });
+      } catch (e) {
+        console.error("Failed to create in-app notification (completed):", e);
+      }
+
+      try {
+        await sendPushToUser(existing.assignedBy, "Task completed", `${existing.title} — completed by ${me.name}`);
+      } catch (e) {
+        console.error("Push send failed (completed):", e);
+      }
+    }
+
+    if (status === "done" && existing.status !== "done" && existing.assignedBy && existing.type === "oneTime" && process.env.RESEND_API_KEY) {
+      const [assigner] = await db.select().from(users).where(eq(users.id, existing.assignedBy)).limit(1);
+      if (assigner?.email) {
+        try {
+          const resend = new Resend(process.env.RESEND_API_KEY);
+          await resend.emails.send({
+            from: FROM,
+            to: assigner.email,
+            subject: `Task completed: ${existing.title}`,
+            html: `<p>Hi ${assigner.name},</p>
+              <p><strong>${existing.title}</strong> has been marked complete by ${me.name}.</p>`,
+          });
+        } catch (e) {
+          console.error("Task completion email failed:", e);
+        }
+      }
+    }
+
+    return res.status(200).json(updated);
+  }
+
+  if (req.method === "DELETE") {
+    const [deleted] = await db.delete(tasks).where(eq(tasks.id, id)).returning();
+    if (!deleted) return res.status(404).json({ message: "Task not found" });
+    return res.status(200).json({ message: "Task deleted" });
   }
 
   return res.status(405).json({ message: "Method not allowed" });

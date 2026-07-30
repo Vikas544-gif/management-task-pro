@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { eq } from "drizzle-orm";
 import { Resend } from "resend";
 import { db } from "../../../lib/db.js";
-import { tasks, users } from "../../../lib/schema.js";
+import { tasks, users, notifications } from "../../../lib/schema.js";
 import { requireUser } from "../../../lib/auth.js";
 import { sendPushToUser } from "../../../lib/webPush.js";
 
@@ -33,7 +33,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const [updated] = await db.update(tasks).set(update).where(eq(tasks.id, id)).returning();
 
     if (status === "done" && existing.status !== "done" && existing.assignedBy) {
-      void sendPushToUser(existing.assignedBy, "Task completed", `${existing.title} — completed by ${me.name}`);
+      try {
+        await db.insert(notifications).values({
+          userId: existing.assignedBy,
+          title: `Task completed: ${existing.title}`,
+          message: `${existing.title} — completed by ${me.name}`,
+          type: "task_completed",
+          taskId: id,
+        });
+      } catch (e) {
+        console.error("Failed to create in-app notification (status completed):", e);
+      }
+
+      try {
+        await sendPushToUser(existing.assignedBy, "Task completed", `${existing.title} — completed by ${me.name}`);
+      } catch (e) {
+        console.error("Push send failed (status completed):", e);
+      }
     }
 
     if (status === "done" && existing.status !== "done" && existing.assignedBy && existing.type === "oneTime" && process.env.RESEND_API_KEY) {
