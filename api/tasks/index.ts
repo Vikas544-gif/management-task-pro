@@ -4,7 +4,6 @@ import { Resend } from "resend";
 import { db } from "../../lib/db.js";
 import { tasks, users, notifications } from "../../lib/schema.js";
 import { requireUser } from "../../lib/auth.js";
-import { sendPushToUser } from "../../lib/webPush.js";
 
 const FROM = "Management Task Pro <noreply@infinityservicesindia.com>";
 
@@ -69,12 +68,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       } catch (e) {
         console.error("Failed to create in-app notification:", e);
-      }
-
-      try {
-        await sendPushToUser(assignedTo, "New task assigned", `${title} — assigned by ${me.name}`);
-      } catch (e) {
-        console.error("Push send failed:", e);
       }
     }
 
