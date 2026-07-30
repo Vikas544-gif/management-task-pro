@@ -45,7 +45,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const window = String(req.query.window || "morning");
   const today = todayIST();
 
-  // ── Lunch reminders (bell only, no email — see design note) ────────────
   if (window === "lunch-order" || window === "lunch-eat") {
     const startOfToday = new Date(`${today}T00:00:00+05:30`);
     const kind = window === "lunch-order" ? "lunch_order" : "lunch_eat";
@@ -69,7 +68,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         message: title,
         type: kind,
       });
-      void sendPushToUser(u.id, title, "");
+      try {
+        await sendPushToUser(u.id, title, "");
+      } catch (e) {
+        console.error("Lunch push failed for", u.id, e);
+      }
       sent++;
     }
     return res.status(200).json({ success: true, window, sent });
@@ -80,7 +83,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const isTodayHoliday = holidaySet.has(today);
   const isSunday = weekdayIST(today) === 0;
 
-  // ── Auto-generate today's daily-task instances for EVERY user ──────────
   let generated = 0;
   if (window === "morning" && !isTodayHoliday && !isSunday) {
     const dailyTasks = await db.select().from(tasks).where(ne(tasks.type, "oneTime"));
