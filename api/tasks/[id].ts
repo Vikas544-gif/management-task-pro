@@ -4,6 +4,7 @@ import { Resend } from "resend";
 import { db } from "../../lib/db.js";
 import { tasks, taskTransfers, users, notifications } from "../../lib/schema.js";
 import { requireUser } from "../../lib/auth.js";
+import { sendPushToUser } from "../../lib/webPush.js";
 
 const FROM = "Management Task Pro <noreply@infinityservicesindia.com>";
 
@@ -75,6 +76,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } catch (e) {
         console.error("Failed to create in-app notification (reassign):", e);
       }
+
+      try {
+        await sendPushToUser(assignedTo, {
+          title: "Task assigned to you",
+          body: `${updated?.title ?? "Task"} — assigned by ${me.name}`,
+        });
+      } catch (e) {
+        console.error("Push send failed (reassign):", e);
+      }
     }
 
     if (assignedTo !== undefined && assignedTo !== existing.assignedTo && assignedTo && process.env.RESEND_API_KEY) {
@@ -108,6 +118,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       } catch (e) {
         console.error("Failed to create in-app notification (completed):", e);
+      }
+
+      try {
+        await sendPushToUser(existing.assignedBy, {
+          title: "Task completed",
+          body: `${existing.title} — completed by ${me.name}`,
+        });
+      } catch (e) {
+        console.error("Push send failed (completed):", e);
       }
     }
 

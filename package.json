@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "management-task-pro",
   "version": "1.0.0",
   "private": true,
@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
+    "@workspace/db": "workspace:*",
     "bcryptjs": "^2.4.3",
     "cookie": "^1.0.2",
     "drizzle-orm": "^0.36.4",

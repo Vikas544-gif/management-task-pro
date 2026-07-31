@@ -160,6 +160,9 @@ importers:
       '@neondatabase/serverless':
         specifier: ^0.10.4
         version: 0.10.4
+      '@workspace/db':
+        specifier: workspace:*
+        version: link:lib/db
       bcryptjs:
         specifier: ^2.4.3
         version: 2.4.3
