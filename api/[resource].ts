@@ -1,14 +1,12 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { eq, and, ne, desc } from "drizzle-orm";
 import { Resend } from "resend";
-import { db as appDb } from "../lib/db.js";
+import { db } from "../lib/db.js";
 import {
   attendance, categories, complianceCompanies, notifications,
   users, emailSettings, tasks, taskTransfers, holidays,
 } from "../lib/schema.js";
 import { requireUser } from "../lib/auth.js";
-import { getVapidPublicKey } from "../lib/webPush.js";
-import { db as wsDb, pushSubscriptionsTable } from "@workspace/db";
 
 const FROM = "Management Task Pro <noreply@infinityservicesindia.com>";
 
@@ -23,7 +21,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const resourceRaw = String(req.query.resource || "");
   const resource = resourceRaw === "taskops" ? "tasks" : resourceRaw;
-  const db = appDb;
 
   // TASKS
   if (resource === "tasks") {
@@ -436,47 +433,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         eligible: recipients.length,
         skippedNoEmail,
       });
-    }
-
-    return res.status(404).json({ message: "Not found" });
-  }
-
-  // PUSH (browser background notifications)
-  if (resource === "push") {
-    const route = String(req.query.route || "");
-
-    if (route === "vapid-public-key" && req.method === "GET") {
-      try {
-        const publicKey = await getVapidPublicKey();
-        return res.status(200).json({ publicKey });
-      } catch (e) {
-        console.error("Failed to get VAPID key:", e);
-        return res.status(200).json({ publicKey: "" });
-      }
-    }
-
-    if (route === "subscribe" && req.method === "POST") {
-      const { endpoint, keys } = req.body || {};
-      if (!endpoint || !keys?.p256dh || !keys?.auth) return res.status(400).json({ success: false });
-      try {
-        await wsDb
-          .insert(pushSubscriptionsTable)
-          .values({ userId: me.id, endpoint, p256dh: keys.p256dh, auth: keys.auth })
-          .onConflictDoUpdate({
-            target: pushSubscriptionsTable.endpoint,
-            set: { userId: me.id, p256dh: keys.p256dh, auth: keys.auth },
-          });
-        return res.status(200).json({ success: true });
-      } catch (e) {
-        console.error("Push subscribe failed:", e);
-        return res.status(200).json({ success: false });
-      }
-    }
-
-    if (route === "unsubscribe" && req.method === "POST") {
-      const { endpoint } = req.body || {};
-      if (endpoint) await wsDb.delete(pushSubscriptionsTable).where(eq(pushSubscriptionsTable.endpoint, endpoint));
-      return res.status(200).json({ success: true });
     }
 
     return res.status(404).json({ message: "Not found" });

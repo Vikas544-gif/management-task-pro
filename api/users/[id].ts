@@ -1,82 +1,91 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
+import { Resend } from "resend";
 import { db } from "../../lib/db.js";
-import { users } from "../../lib/schema.js";
+import { tasks, users, notifications } from "../../lib/schema.js";
 import { requireUser } from "../../lib/auth.js";
 
-function parseBody(req: VercelRequest): Record<string, unknown> {
-  if (req.body == null) return {};
-  if (typeof req.body === "string") {
-    try { return JSON.parse(req.body); } catch { return {}; }
-  }
-  return req.body as Record<string, unknown>;
-}
+const FROM = "Management Task Pro <noreply@infinityservicesindia.com>";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, PATCH, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(204).end();
 
   const me = requireUser(req, res);
   if (!me) return;
 
-  const id = Number(req.query.id);
-  if (!id) return res.status(400).json({ message: "Invalid user id" });
-
   if (req.method === "GET") {
-    const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
-    if (!user) return res.status(404).json({ message: "User not found" });
-    const { password, passwordPlain, ...safe } = user;
-    return res.status(200).json(safe);
+    const allTasks = await db.select().from(tasks);
+    const allUsers = await db.select().from(users);
+    const nameOf = new Map(allUsers.map((u) => [u.id, u.name]));
+    // The frontend expects assignedByName / assignedToName alongside the ids.
+    const enriched = allTasks.map((t) => ({
+      ...t,
+      assignedByName: t.assignedBy != null ? nameOf.get(t.assignedBy) ?? null : null,
+      assignedToName: t.assignedTo != null ? nameOf.get(t.assignedTo) ?? null : null,
+    }));
+    return res.status(200).json(enriched);
   }
 
-  if (req.method === "PATCH" || req.method === "PUT") {
-    const { name, username, email, role, department, center, reportsTo, active, password, centerPermissions } = parseBody(req);
-    const update: Record<string, unknown> = {};
-    if (name !== undefined) update.name = name;
-    if (username !== undefined) update.username = String(username).trim();
-    if (email !== undefined) update.email = email;
-    if (role !== undefined) update.role = role;
-    if (department !== undefined) update.department = department;
-    if (center !== undefined) update.center = center;
-    if (reportsTo !== undefined) update.reportsTo = reportsTo;
-    if (active !== undefined) update.active = active;
-    if (centerPermissions !== undefined) update.centerPermissions = centerPermissions;
-    if (password) {
-      update.password = await bcrypt.hash(String(password), 10);
-      update.passwordPlain = String(password);
+  if (req.method === "POST") {
+    const {
+      title, description, assignedTo, priority, dueDate, reminderTime,
+      type, category, department, company, remark, sendEmailNotification,
+    } = req.body || {};
+    if (!title) return res.status(400).json({ message: "Task title is required" });
+
+    const [created] = await db
+      .insert(tasks)
+      .values({
+        title,
+        description: description || null,
+        assignedTo: assignedTo ?? null,
+        assignedBy: me.id,
+        priority: priority || "medium",
+        dueDate: dueDate || null,
+        reminderTime: reminderTime || null,
+        type: type || "oneTime",
+        category: category || null,
+        department: department || null,
+        company: company || null,
+        remark: remark || null,
+        sendEmailNotification: sendEmailNotification ?? true,
+      })
+      .returning();
+
+    if (assignedTo) {
+      await db.insert(notifications).values({
+        userId: assignedTo,
+        title: `New task assigned: ${title}`,
+        message: `Assigned by ${me.name}${dueDate ? ` — due ${dueDate}` : ""}`,
+      });
     }
 
-    if (Object.keys(update).length === 0) {
-      console.warn("PATCH /api/users/:id — no recognized fields in body:", JSON.stringify(parseBody(req)));
-      const [current] = await db.select().from(users).where(eq(users.id, id)).limit(1);
-      if (!current) return res.status(404).json({ message: "User not found" });
-      const { password: _pw, passwordPlain: _pwp, ...safe } = current;
-      return res.status(200).json(safe);
-    }
-
-    let updated;
-    try {
-      [updated] = await db.update(users).set(update).where(eq(users.id, id)).returning();
-    } catch (e: any) {
-      if (e?.code === "23505" || /unique/i.test(String(e?.message))) {
-        return res.status(409).json({ message: "That username is already taken" });
+    if ((sendEmailNotification ?? true) && assignedTo && process.env.RESEND_API_KEY) {
+      const [assignee] = await db.select().from(users).where(eq(users.id, assignedTo)).limit(1);
+      if (assignee?.email) {
+        try {
+          const resend = new Resend(process.env.RESEND_API_KEY);
+          await resend.emails.send({
+            from: FROM,
+            to: assignee.email,
+            subject: `New task assigned: ${title}`,
+            html: `<p>Hi ${assignee.name},</p>
+              <p>You've been assigned a new task: <strong>${title}</strong></p>
+              <p>Assigned by: ${me.name}</p>
+              ${description ? `<p>${description}</p>` : ""}
+              ${dueDate ? `<p>Due: ${dueDate}</p>` : ""}
+              <p>Priority: ${priority || "medium"}</p>`,
+          });
+        } catch (e) {
+          console.error("Task assignment email failed:", e);
+        }
       }
-      throw e;
     }
-    console.log("PATCH /api/users/:id — wrote:", JSON.stringify(update), "result:", JSON.stringify(updated));
-    if (!updated) return res.status(404).json({ message: "User not found" });
-    const { password: _pw, passwordPlain: _pwp, ...safe } = updated;
-    return res.status(200).json(safe);
-  }
 
-  if (req.method === "DELETE") {
-    // Soft-delete: mark inactive instead of removing (keeps task history intact).
-    const [updated] = await db.update(users).set({ active: false }).where(eq(users.id, id)).returning();
-    if (!updated) return res.status(404).json({ message: "User not found" });
-    return res.status(200).json({ message: "User deactivated" });
+    return res.status(201).json(created);
   }
 
   return res.status(405).json({ message: "Method not allowed" });
