@@ -15,8 +15,8 @@ export interface SessionUser {
 }
 
 export function signSession(user: SessionUser): string {
-  // 12h token; the client calls /api/auth/me on load to re-validate.
-  return jwt.sign(user, SECRET, { expiresIn: "12h" });
+  // 7-day token; the client calls /api/auth/me on load to re-validate.
+  return jwt.sign(user, SECRET, { expiresIn: "7d" });
 }
 
 export function setSessionCookie(res: VercelResponse, token: string) {
@@ -27,7 +27,7 @@ export function setSessionCookie(res: VercelResponse, token: string) {
       secure: true,
       sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 12,
+      maxAge: 60 * 60 * 24 * 7,
     })
   );
 }
