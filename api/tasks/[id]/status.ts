@@ -32,7 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const [updated] = await db.update(tasks).set(update).where(eq(tasks.id, id)).returning();
 
-    if (status === "done" && existing.status !== "done" && existing.assignedBy) {
+    if (status === "done" && existing.status !== "done" && existing.assignedBy && existing.assignedBy !== me.id) {
       try {
         await db.insert(notifications).values({
           userId: existing.assignedBy,
@@ -55,7 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    if (status === "done" && existing.status !== "done" && existing.assignedBy && existing.type === "oneTime" && process.env.RESEND_API_KEY) {
+    if (status === "done" && existing.status !== "done" && existing.assignedBy && existing.assignedBy !== me.id && existing.type === "oneTime" && process.env.RESEND_API_KEY) {
       const [assigner] = await db.select().from(users).where(eq(users.id, existing.assignedBy)).limit(1);
       if (assigner?.email) {
         try {
